@@ -1,0 +1,4 @@
+src/server/*.db
+src/server/*.db-journal
+__pycache__/
+*.pyc
