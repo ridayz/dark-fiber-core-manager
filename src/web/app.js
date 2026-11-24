@@ -33,6 +33,7 @@
     search: "",
     cableFilter: "all",
     coreFilter: "all",
+    mapMode: "panel",
     leaseFilter: "all",
     sheetStatus: null,
     sheetEntries: [],
@@ -468,6 +469,7 @@
     try {
       if (route.name === "cables" && route.id) {
         state.cable = await api(`/cables/${route.id}`);
+        state.mapMode = state.cable.core_count === 144 ? "panel" : "tube";
         buildCoreIndex();
       } else if (route.name === "tenants" && route.id) {
         state.tenant = await api(`/tenants/${route.id}`);
@@ -813,9 +815,13 @@
         <div class="map-toolbar">
           <div>
             <h3 class="panel-title">Peta core</h3>
-            <p class="panel-meta">${c.tubes.length} tube · ${num(c.core_count)} core · klik core untuk memilih · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
+            <p class="panel-meta">${c.core_count === 144 && state.mapMode === "panel" ? `Panel 36 kolom · 2 baris × 18 kolom · 144 core` : `${c.tubes.length} tube × 12 core`} · klik core untuk memilih · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
           </div>
           <div class="map-tools">
+            ${c.core_count === 144 ? `<div class="segmented" role="group" aria-label="Tampilan peta">
+              <button class="seg-btn ${state.mapMode === "panel" ? "active" : ""}" data-action="map-mode" data-mode="panel">Panel</button>
+              <button class="seg-btn ${state.mapMode === "tube" ? "active" : ""}" data-action="map-mode" data-mode="tube">Tube</button>
+            </div>` : ""}
             <div class="segmented" role="group" aria-label="Filter status core">
               <button class="seg-btn ${state.coreFilter === "all" ? "active" : ""}" data-action="filter-core" data-filter="all">Semua</button>
               <button class="seg-btn ${state.coreFilter === "available" ? "active" : ""}" data-action="filter-core" data-filter="available">Tersedia</button>
@@ -830,11 +836,11 @@
           <span class="legend-item"><span class="dot sheet-dot-legend"></span>Sheet (Tujuan terisi) <span class="count">${num(c.sheet_used_cores || 0)}</span></span>
           ${tenantChips}
         </div>
-        <div class="tube-grid">
-          ${c.tubes.map((tube) => tubeCard(tube, c)).join("")}
-        </div>
+        ${c.core_count === 144 && state.mapMode === "panel"
+          ? panelMap(c)
+          : `<div class="tube-grid">${c.tubes.map((tube) => tubeCard(tube, c)).join("")}</div>`}
         <div class="map-foot">
-          <span>Garis bawah tiap core mengikuti kode warna 12 fiber TIA-598</span>
+          <span>${c.core_count === 144 && state.mapMode === "panel" ? "Panel LC: 4 core per kolom, 18 kolom per baris (144 core = 2 baris)" : "Garis bawah tiap core mengikuti kode warna 12 fiber TIA-598"}</span>
           <span>${num(used)} terpakai · ${num(free)} tersedia</span>
         </div>
       </section>
@@ -880,6 +886,43 @@
           <button class="btn btn-primary" data-action="allocate-open" id="tray-allocate">Alokasikan</button>
         </div>
       </div>`;
+  }
+
+  function panelColumns(cable) {
+    return Math.ceil((cable.core_count || 0) / 4);
+  }
+
+  // Panel LC: 4 core ke bawah per kolom, lalu kolom jalan ke kanan.
+  // Setelah 18 kolom, pindah ke baris berikutnya (144 core = 2 baris × 18 kolom).
+  function panelMap(cable) {
+    const rows = 4;
+    const perBand = 18;
+    const cols = panelColumns(cable);
+    const bands = [];
+    for (let start = 0; start < cols; start += perBand) {
+      const stop = Math.min(start + perBand, cols);
+      const columns = [];
+      for (let col = start; col < stop; col += 1) {
+        const cells = [];
+        for (let row = 0; row < rows; row += 1) {
+          const no = col * rows + row + 1;
+          if (no > cable.core_count) break;
+          const core = state.coreIndex.get(no);
+          cells.push(core ? coreCell(core, cable) : `<span class="core core-void" aria-hidden="true"></span>`);
+        }
+        const first = col * rows + 1;
+        const last = Math.min(first + rows - 1, cable.core_count);
+        columns.push(
+          `<div class="panel-col" title="Kolom ${col + 1} · core ${first}–${last}">${cells.join("")}</div>`
+        );
+      }
+      const bandFirst = start * rows + 1;
+      const bandLast = Math.min(stop * rows, cable.core_count);
+      bands.push(
+        `<div class="panel-band"><span class="band-label">core ${bandFirst}–${bandLast}</span><div class="band-cols">${columns.join("")}</div></div>`
+      );
+    }
+    return `<div class="panel-map-wrap"><div class="panel-map">${bands.join("")}</div></div>`;
   }
 
   function tubeCard(tube, cable) {
@@ -1424,6 +1467,11 @@
         break;
       case "filter-core":
         state.coreFilter = dataset.filter;
+        renderView();
+        syncSelection();
+        break;
+      case "map-mode":
+        state.mapMode = dataset.mode;
         renderView();
         syncSelection();
         break;
