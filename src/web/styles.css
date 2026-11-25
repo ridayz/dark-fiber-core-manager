@@ -20,10 +20,19 @@
   --r: 12px;
   --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   --sans: "Inter", "SF Pro Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
-  --shadow-sm: 0 1px 2px rgba(24, 34, 48, 0.05), 0 2px 8px rgba(24, 34, 48, 0.06);
-  --shadow: 0 6px 16px rgba(24, 34, 48, 0.08), 0 2px 4px rgba(24, 34, 48, 0.05);
-  --shadow-lg: 0 14px 32px rgba(24, 34, 48, 0.12), 0 4px 10px rgba(24, 34, 48, 0.06);
-  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(24, 34, 48, 0.04);
+  --shadow-sm:
+    0 1px 1px rgba(24, 34, 48, 0.02),
+    0 2px 4px rgba(24, 34, 48, 0.03),
+    0 4px 10px rgba(24, 34, 48, 0.04);
+  --shadow:
+    0 1px 2px rgba(24, 34, 48, 0.02),
+    0 4px 8px rgba(24, 34, 48, 0.04),
+    0 12px 24px rgba(24, 34, 48, 0.06);
+  --shadow-lg:
+    0 2px 4px rgba(24, 34, 48, 0.02),
+    0 8px 16px rgba(24, 34, 48, 0.05),
+    0 24px 48px rgba(24, 34, 48, 0.08);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.92), inset 0 -1px 0 rgba(24, 34, 48, 0.03);
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
