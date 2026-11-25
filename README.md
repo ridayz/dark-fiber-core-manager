@@ -20,7 +20,7 @@ Dashboard ini adalah versi baru dari `backbone-core-dashboard`. Versi lama tidak
 - Distribusi core per kabel dengan warna tenant, utilisasi per ukuran core (24 / 48 / 72 / 96 / 144 / 288 / 576).
 - **Inventaris kabel berbasis plant asli** — setiap panel OTB/MDF/ODC dari Google Sheet otomatis menjadi baris `cables` (57 perangkat) saat sync. Tidak ada lagi kabel contoh.
 - Peta core per tube (12 core per tube) dengan kode warna fiber TIA-598; halaman detail menampilkan tabel port OTB dari sheet di bawah peta.
-- **Peta panel LC untuk kabel 144 core** — mode `Panel` menampilkan 36 kolom × 4 core dalam **satu baris** (kolom 1 = 1-4, kolom 2 = 5-8, dst, kolom 36 = 141-144), kotak dikecilkan supaya muat layar tanpa scroll ke kanan. Ukuran lain tetap memakai tampilan tube 12 core.
+- **Peta panel LC untuk kabel 144 core** — mode `Panel` mengikuti fisik OTB 192: 24 kolom × 4 core × 2 baris (atas 1-96, bawah 97-192, urutan ke bawah per kolom). Nama kabel tetap OTB 144; slot 145-192 ditampilkan void. Ukuran lain tetap memakai tampilan tube 12 core.
 - Pilih beberapa core (klik, shift-klik untuk rentang, atau "Pilih tersedia") lalu alokasikan sekaligus ke tenant.
 - Filter peta berdasarkan status core (semua / tersedia / terpakai).
 - Manajemen tenant: tambah, edit, kontak PIC, status aktif/suspend/nonaktif (6 tenant contoh tersedia sebagai titik awal).

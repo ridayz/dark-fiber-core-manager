@@ -922,7 +922,7 @@
         <div class="map-toolbar">
           <div>
             <h3 class="panel-title">Peta core</h3>
-            <p class="panel-meta">${c.core_count === 144 && state.mapMode === "panel" ? `Panel 36 kolom · 4 baris · 144 core` : `${c.tubes.length} tube × 12 core`} · klik core untuk memilih · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
+            <p class="panel-meta">${c.core_count === 144 && state.mapMode === "panel" ? `Panel OTB 144 (fisik 192) · 24 kolom × 2 baris` : `${c.tubes.length} tube × 12 core`} · klik core untuk memilih · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
           </div>
           <div class="map-tools">
             ${c.core_count === 144 ? `<div class="segmented" role="group" aria-label="Tampilan peta">
@@ -947,7 +947,7 @@
           ? panelMap(c)
           : `<div class="tube-grid">${c.tubes.map((tube) => tubeCard(tube, c)).join("")}</div>`}
         <div class="map-foot">
-          <span>${c.core_count === 144 && state.mapMode === "panel" ? "Panel LC: 4 core per kolom, 36 kolom dalam satu baris" : "Garis bawah tiap core mengikuti kode warna 12 fiber TIA-598"}</span>
+          <span>${c.core_count === 144 && state.mapMode === "panel" ? "Panel LC: 4 core per kolom, 24 kolom per baris, 2 baris (1-96, 97-192)" : "Garis bawah tiap core mengikuti kode warna 12 fiber TIA-598"}</span>
           <span>${num(used)} terpakai · ${num(free)} tersedia</span>
         </div>
       </section>
@@ -996,29 +996,46 @@
   }
 
   function panelColumns(cable) {
+    if (cable.core_count === 144) return 24;
     return Math.ceil((cable.core_count || 0) / 4);
   }
 
-  // Panel LC: 4 core ke bawah per kolom, 36 kolom dalam satu baris (144 core).
+  // Panel LC 144: fisik OTB 192 (24 kolom x 4 core x 2 baris = 192).
+  // Urutan: 1-4 turun, 5-8 turun, ... 93-96 (baris atas 24 kolom), lalu 97-100 ... 189-192 (baris bawah).
   function panelMap(cable) {
     const rows = 4;
-    const cols = panelColumns(cable);
-    const columns = [];
-    for (let col = 0; col < cols; col += 1) {
-      const cells = [];
-      for (let row = 0; row < rows; row += 1) {
-        const no = col * rows + row + 1;
-        if (no > cable.core_count) break;
-        const core = state.coreIndex.get(no);
-        cells.push(core ? coreCell(core, cable) : `<span class="core core-void" aria-hidden="true"></span>`);
+    const colsPerBand = cable.core_count === 144 ? 24 : panelColumns(cable);
+    const bandCount = cable.core_count === 144 ? 2 : 1;
+    const totalSlots = colsPerBand * rows * bandCount;
+    const bands = [];
+    for (let band = 0; band < bandCount; band += 1) {
+      const columns = [];
+      for (let col = 0; col < colsPerBand; col += 1) {
+        const cells = [];
+        const base = band * colsPerBand * rows + col * rows;
+        for (let row = 0; row < rows; row += 1) {
+          const no = base + row + 1;
+          if (no > totalSlots) break;
+          const core = state.coreIndex.get(no);
+          cells.push(
+            core
+              ? coreCell(core, cable)
+              : `<span class="core core-void" title="Core ${no}" aria-hidden="true">${no}</span>`,
+          );
+        }
+        const first = base + 1;
+        const last = base + rows;
+        columns.push(
+          `<div class="panel-col" title="Kolom ${band * colsPerBand + col + 1} · core ${first}–${last}">${cells.join("")}</div>`,
+        );
       }
-      const first = col * rows + 1;
-      const last = Math.min(first + rows - 1, cable.core_count);
-      columns.push(
-        `<div class="panel-col" title="Kolom ${col + 1} · core ${first}–${last}">${cells.join("")}</div>`
-      );
+      const bandFirst = band * colsPerBand * rows + 1;
+      const bandLast = bandFirst + colsPerBand * rows - 1;
+      const label = bandCount > 1 ? `<span class="band-label">core ${bandFirst}–${bandLast}</span>` : "";
+      bands.push(`<div class="panel-band">${label}<div class="band-cols" style="grid-template-columns:repeat(${colsPerBand},minmax(0,1fr))">${columns.join("")}</div></div>`);
     }
-    return `<div class="panel-map-wrap"><div class="panel-map"><div class="panel-band"><div class="band-cols">${columns.join("")}</div></div></div></div>`;
+    const className = bandCount > 1 ? "panel-map panel-map-bands" : "panel-map";
+    return `<div class="panel-map-wrap"><div class="${className}">${bands.join("")}</div></div>`;
   }
 
   function tubeCard(tube, cable) {
