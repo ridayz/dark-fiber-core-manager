@@ -389,31 +389,27 @@
     const bottom = 34;
     const innerW = W - left - right;
     const innerH = H - top - bottom;
-    const step = points.length > 1 ? innerW / (points.length - 1) : 0;
-    const coords = points.map((p, i) => [
-      left + i * step,
-      top + innerH - (p.value / max) * innerH,
-    ]);
-    const line = coords.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-    const area = `${line} L${coords[coords.length - 1][0].toFixed(1)},${top + innerH} L${coords[0][0].toFixed(1)},${top + innerH} Z`;
-    const grid = [0, 0.5, 1].map((f) => {
+    const slot = innerW / points.length;
+    const barW = Math.min(72, slot * 0.56);
+    const grid = [0, 0.25, 0.5, 0.75, 1].map((f) => {
       const y = top + innerH - f * innerH;
       return `<line x1="${left}" y1="${y.toFixed(1)}" x2="${W - right}" y2="${y.toFixed(1)}" class="chart-grid"/>
         <text x="${left - 10}" y="${(y + 3).toFixed(1)}" class="chart-y">${num(Math.round(max * f))}</text>`;
     }).join("");
-    const labels = coords.map(([x], i) => `<text x="${x.toFixed(1)}" y="${H - 10}" class="chart-x">${esc(points[i].label)}</text>`).join("");
-    const dots = coords.map(([x, y], i) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="chart-dot"><title>${esc(points[i].label)}: ${num(points[i].value)} core</title></circle>`).join("");
+    const bars = points.map((p, i) => {
+      const x = left + i * slot + (slot - barW) / 2;
+      const h = Math.max(2, (p.value / max) * innerH);
+      const y = top + innerH - h;
+      const cx = x + barW / 2;
+      return `<g>
+        <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="6" class="chart-bar"><title>${esc(p.label)}: ${num(p.value)} core</title></rect>
+        <text x="${cx.toFixed(1)}" y="${(y - 8).toFixed(1)}" class="chart-val">${num(p.value)}</text>
+        <text x="${cx.toFixed(1)}" y="${H - 10}" class="chart-x">${esc(p.label)}</text>
+      </g>`;
+    }).join("");
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Core terpakai per area">
-      <defs>
-        <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#003a70" stop-opacity="0.18"/>
-          <stop offset="100%" stop-color="#003a70" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
       ${grid}
-      <path d="${area}" fill="url(#areaFill)"/>
-      <path d="${line}" class="chart-line"/>
-      ${dots}${labels}
+      ${bars}
     </svg>`;
   }
 
