@@ -406,8 +406,8 @@
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Core terpakai per area">
       <defs>
         <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#6d8cff" stop-opacity="0.34"/>
-          <stop offset="100%" stop-color="#6d8cff" stop-opacity="0"/>
+          <stop offset="0%" stop-color="#8b93ff" stop-opacity="0.32"/>
+          <stop offset="100%" stop-color="#8b93ff" stop-opacity="0"/>
         </linearGradient>
       </defs>
       ${grid}
@@ -456,8 +456,8 @@
   // ---------------------------------------------------------------- routing
   function getRoute() {
     const raw = location.hash.replace(/^#\/?/, "") || "overview";
-    const [name, id] = raw.split("/");
-    return { name: name || "overview", id: id || null };
+    const [name, id, sub] = raw.split("/");
+    return { name: name || "overview", id: id || null, sub: sub || null };
   }
 
   function updateChrome(route) {
@@ -501,15 +501,20 @@
       sub = `${state.leases.length} lease berjalan${attention ? ` · ${attention} perlu perhatian` : ""}`;
       primary = `<button class="btn btn-primary" data-route="#/cables"><svg class="ico"><use href="#i-plus"/></svg>Buat lease</button>`;
     } else if (route.name === "otb") {
-      const [t] = titles.otb;
-      title = t;
       const status = state.sheetStatus;
       const active = status && route.id ? status.tabs.find((x) => x.gid === route.id) : null;
-      sub = active
-        ? `${active.name} · ${num(active.entries)} entri port`
-        : status
-          ? `${status.tabs.length} gedung/rak · ${num(status.total_entries)} entri port`
-          : "Memuat peta OTB…";
+      if (active && route.sub) {
+        title = "Detail OTB";
+        sub = `${active.name} · ${num(active.entries)} entri port di site ini`;
+      } else {
+        const [t] = titles.otb;
+        title = t;
+        sub = active
+          ? `${active.name} · ${num(active.entries)} entri port`
+          : status
+            ? `${status.tabs.length} gedung/rak · ${num(status.total_entries)} entri port`
+            : "Memuat peta OTB…";
+      }
       primary = `<button class="btn btn-primary" data-action="sheet-sync" ${state.sheetSyncing ? "disabled" : ""}><svg class="ico"><use href="#i-clock"/></svg>${state.sheetSyncing ? "Menyinkronkan…" : "Sync sekarang"}</button>`;
     } else {
       [title, sub] = titles[route.name] || titles.overview;
@@ -537,7 +542,7 @@
 
   async function renderApp() {
     const route = getRoute();
-    const key = `${route.name}/${route.id || ""}`;
+    const key = `${route.name}/${route.id || ""}/${route.sub || ""}`;
     const changed = key !== state.routeKey;
 
     if (changed) {
@@ -553,7 +558,9 @@
       state.tenant = null;
       state.cableFilter = "all";
       state.coreFilter = "all";
-      state.sheetQuery = "";
+      // Pindah site ↔ detail OTB tetap di tab sheet yang sama: kata kunci jangan hilang.
+      const sameSheetTab = route.name === "otb" && state.sheetTab && route.id === state.sheetTab;
+      if (!sameSheetTab) state.sheetQuery = "";
       // Search jump: langsung ke-filter ke Port yang dicari (mis. WSA).
       if (state.searchJump && route.name === "otb") {
         state.sheetQuery = state.searchJump.q || "";
@@ -619,7 +626,7 @@
     if (route.name === "cables" && route.id) return renderCableView();
     if (route.name === "tenants" && route.id) return renderTenantView();
     if (route.name === "cables") return renderCablesView();
-    if (route.name === "otb") return renderOtbView();
+    if (route.name === "otb") return renderOtbView(route);
     if (route.name === "tenants") return renderTenantsView();
     if (route.name === "leases") return renderLeasesView();
     return renderOverview();
@@ -1806,7 +1813,75 @@
     });
   }
 
-  function renderOtbView() {
+  // ------------------------------------------------------------ OTB helpers
+  const OTB_SIZE_RE = /(?<![0-9])(576|288|144|96|72|48|24)(?![0-9])/i;
+
+  function panelSize(name) {
+    const match = OTB_SIZE_RE.exec(String(name || ""));
+    return match ? Number(match[1]) : 0;
+  }
+
+  // "Port 11-12" → [11, 12] · "Port 27&30" → [27, 30] · "Port 13" → [13]
+  function portCores(port) {
+    const text = String(port || "");
+    const found = new Set();
+    const range = /(\d+)\s*[-–]\s*(\d+)/g;
+    let match;
+    while ((match = range.exec(text)) !== null) {
+      const start = Number(match[1]);
+      const stop = Number(match[2]);
+      if (stop > start && stop - start <= 32) {
+        for (let no = start; no <= stop; no += 1) found.add(no);
+      } else {
+        found.add(start);
+        found.add(stop);
+      }
+    }
+    for (const raw of text.match(/\d+/g) || []) found.add(Number(raw));
+    return [...found];
+  }
+
+  function panelUsage(panel) {
+    const cores = new Set();
+    for (const row of panel.rows) {
+      for (const no of portCores(row.port)) cores.add(no);
+    }
+    const size = panelSize(panel.panel);
+    const used = size ? [...cores].filter((no) => no >= 1 && no <= size).length : cores.size;
+    return { used, size };
+  }
+
+  function otbRowMatches(row, term) {
+    if (!term) return true;
+    return [row.port, row.destination, row.note, Object.values(row.fields || {}).join(" ")]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(term);
+  }
+
+  function otbPanelSearch(panel) {
+    return [panel.section, panel.panel, ...panel.rows.flatMap((row) => [row.port, row.destination, row.note])]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  }
+
+  function otbCableFor(tabName, panelName) {
+    const key = String(panelName || "").toLowerCase();
+    const rows = (state.summary && state.summary.sheet_by_cable) || [];
+    return (
+      rows.find((row) => {
+        if (row.tab_name !== tabName) return false;
+        const code = String(row.panel_code || "")
+          .toLowerCase()
+          .split(" [")[0];
+        return Boolean(code) && (key === code || key.startsWith(code));
+      }) || null
+    );
+  }
+
+  function renderOtbView(route) {
     const status = state.sheetStatus;
     if (!status) {
       viewEl.innerHTML = loadingState();
@@ -1817,32 +1892,26 @@
     const tab = tabs.find((t) => t.gid === activeGid) || tabs[0] || null;
     const all = state.sheetEntries || [];
     const q = state.sheetQuery.trim().toLowerCase();
-    const entries = q
-      ? all.filter((e) =>
-          [e.section, e.panel, e.port, e.destination, e.note, Object.values(e.fields || {}).join(" ")]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase()
-            .includes(q),
-        )
-      : all;
+    // Semua panel di tab ini (tanpa filter) supaya daftar OTB tetap lengkap.
+    const entries = all;
 
     const groups = [];
     const byKey = new Map();
     for (const entry of entries) {
       const key = `${entry.section || ""}\u0000${entry.panel || ""}`;
       if (!byKey.has(key)) {
-        const group = { section: entry.section, panel: entry.panel, rows: [] };
+        const group = { index: groups.length, section: entry.section, panel: entry.panel, rows: [] };
         byKey.set(key, group);
         groups.push(group);
       }
       byKey.get(key).rows.push(entry);
     }
 
+    const subIndex = route && route.sub !== null && route.sub !== undefined ? Number(route.sub) : null;
+    const detail = Number.isInteger(subIndex) ? groups[subIndex] || null : null;
     const failed = tabs.filter((t) => t.error);
 
-    viewEl.innerHTML = `
-      <div class="otb-layout">
+    const rail = `
         <aside class="card otb-index">
           <div class="otb-index-head">
             <span class="eyebrow">Gedung / rak</span>
@@ -1864,61 +1933,128 @@
             ${failed.length ? `<p class="state state-warn"><span class="dot"></span>${failed.length} tab gagal diakses</p>` : ""}
             <a class="link" href="${esc(status.spreadsheet_url)}" target="_blank" rel="noopener">Buka Google Sheet ↗</a>
           </div>
-        </aside>
+        </aside>`;
 
+    const searchBox = (placeholder) => `<label class="search otb-search">
+              <svg class="ico"><use href="#i-search"/></svg>
+              <input id="sheet-q" type="search" value="${esc(state.sheetQuery)}" placeholder="${esc(placeholder)}" autocomplete="off" aria-label="${esc(placeholder)}">
+            </label>`;
+
+    const errorCard =
+      tab && tab.error
+        ? `<div class="card otb-error"><svg class="ico"><use href="#i-alert"/></svg><div><strong>Gagal sync tab ini</strong><p>${esc(tab.error)}</p></div></div>`
+        : "";
+
+    let main;
+    if (detail) {
+      // ---------------------------------------------------- detail satu OTB
+      const usage = panelUsage(detail);
+      const rows = q ? detail.rows.filter((row) => otbRowMatches(row, q)) : detail.rows;
+      const cable = otbCableFor(tab ? tab.name : "", detail.panel);
+      main = `
         <section class="otb-main">
           <div class="card otb-head">
-            <div>
-              <h2 class="otb-title">${esc(tab ? tab.name : "—")}</h2>
-              <p class="otb-sub" id="otb-count">${num(entries.length)}${q ? ` dari ${num(all.length)}` : ""} entri port · ${groups.length} panel</p>
+            <div class="otb-head-main">
+              <a class="otb-back" href="#/otb/${encodeURIComponent(activeGid)}">← Semua OTB · ${esc(tab ? tab.name : "")}</a>
+              <h2 class="otb-title">${esc(detail.panel || "Tanpa panel")}</h2>
+              <p class="otb-sub" id="otb-count">${num(rows.length)}${q ? ` dari ${num(detail.rows.length)}` : ""} entri port · ${num(usage.used)}${usage.size ? `/${num(usage.size)}` : ""} core${detail.section ? ` · ${esc(detail.section)}` : ""}</p>
             </div>
-            <label class="search otb-search">
-              <svg class="ico"><use href="#i-search"/></svg>
-              <input id="sheet-q" type="search" value="${esc(state.sheetQuery)}" placeholder="Cari port, tujuan, OTB" autocomplete="off" aria-label="Cari di peta OTB">
-            </label>
+            <div class="otb-head-actions">
+              ${searchBox("Cari port, tujuan, keterangan")}
+              ${cable ? `<a class="btn btn-ghost" href="#/cables/${cable.cable_id}"><svg class="ico"><use href="#i-route"/></svg>Peta core</a>` : ""}
+            </div>
           </div>
 
-          ${tab && tab.error ? `<div class="card otb-error"><svg class="ico"><use href="#i-alert"/></svg><div><strong>Gagal sync tab ini</strong><p>${esc(tab.error)}</p></div></div>` : ""}
+          ${errorCard}
 
           ${
-            entries.length
+            detail.rows.length
               ? `<div class="table-wrap otb-table"><table>
                   <thead><tr><th>Port / user</th><th>Tujuan</th><th>Keterangan</th></tr></thead>
                   <tbody>
-                    ${groups
+                    <tr class="otb-group"><td colspan="3">
+                      ${detail.section ? `<span class="otb-section">${esc(detail.section)}</span>` : ""}
+                      <span class="otb-panel">${esc(detail.panel || "Tanpa panel")}</span>
+                      <span class="otb-count">${num(rows.length)} port</span>
+                    </td></tr>
+                    ${rows
                       .map(
-                        (group) => `
-                        <tr class="otb-group"><td colspan="3">
-                          ${group.section ? `<span class="otb-section">${esc(group.section)}</span>` : ""}
-                          <span class="otb-panel">${esc(group.panel || "Tanpa panel")}</span>
-                          <span class="otb-count">${num(group.rows.length)} port</span>
-                        </td></tr>
-                        ${group.rows
-                          .map(
-                            (row) => `<tr data-search="${esc(
-                              [row.section, row.panel, row.port, row.destination, row.note]
-                                .filter(Boolean)
-                                .join(" ")
-                                .toLowerCase(),
-                            )}">
-                              <td class="otb-port">${esc(row.port) || "–"}</td>
-                              <td>${esc(row.destination) || "<span class='muted'>–</span>"}</td>
-                              <td class="otb-note">${esc(row.note) || "<span class='muted'>–</span>"}</td>
-                            </tr>`,
-                          )
-                          .join("")}`,
+                        (row) => `<tr data-search="${esc(
+                          [row.section, row.panel, row.port, row.destination, row.note]
+                            .filter(Boolean)
+                            .join(" ")
+                            .toLowerCase(),
+                        )}">
+                          <td class="otb-port">${esc(row.port) || "–"}</td>
+                          <td>${esc(row.destination) || "<span class='muted'>–</span>"}</td>
+                          <td class="otb-note">${esc(row.note) || "<span class='muted'>–</span>"}</td>
+                        </tr>`,
                       )
                       .join("")}
                   </tbody>
                 </table></div>`
               : emptyState(
-                  q ? "Tidak ada hasil" : "Belum ada data OTB",
+                  q ? "Tidak ada port yang cocok" : "Belum ada port di OTB ini",
                   q ? `Tidak ada entri yang cocok dengan “${state.sheetQuery}”.` : "Jalankan sync untuk menarik data dari Google Sheets.",
                   "i-layers",
                 )
           }
-        </section>
-      </div>`;
+        </section>`;
+    } else {
+      // ------------------------------------------------------ daftar OTB site
+      const cards = groups.map((panel) => {
+        const usage = panelUsage(panel);
+        const hits = q ? panel.rows.filter((row) => otbRowMatches(row, q)).length : 0;
+        return { panel, ...usage, search: otbPanelSearch(panel), hits };
+      });
+      const shown = q
+        ? cards.filter(
+            (item) => item.hits > 0 || `${item.panel.section} ${item.panel.panel}`.toLowerCase().includes(q),
+          )
+        : cards;
+      const totalCores = cards.reduce((sum, item) => sum + item.used, 0);
+      main = `
+        <section class="otb-main">
+          <div class="card otb-head">
+            <div class="otb-head-main">
+              <h2 class="otb-title">${esc(tab ? tab.name : "—")}</h2>
+              <p class="otb-sub" id="otb-count">${num(shown.length)}${q ? ` dari ${num(cards.length)}` : ""} OTB · ${num(all.length)} entri port · ${num(totalCores)} core</p>
+            </div>
+            ${searchBox("Cari OTB, port, tujuan")}
+          </div>
+
+          ${errorCard}
+
+          ${
+            cards.length
+              ? `<div class="otb-cards">
+                  ${shown
+                    .map(
+                      (item) => `<a class="otb-card" href="#/otb/${encodeURIComponent(activeGid)}/${item.panel.index}" data-search="${esc(item.search)}">
+                        <div class="otb-card-top">
+                          <span class="otb-card-rak">${esc(item.panel.section || "Tanpa rak")}</span>
+                          <span class="otb-card-size">${item.size ? `${num(item.size)} core` : "—"}</span>
+                        </div>
+                        <p class="otb-card-name">${esc(item.panel.panel || "Tanpa panel")}</p>
+                        <div class="otb-card-foot">
+                          <span>${num(item.panel.rows.length)} entri port</span>
+                          <span class="mono">${num(item.used)}${item.size ? `/${num(item.size)}` : ""} core</span>
+                        </div>
+                        <div class="meter"><span style="width:${item.size ? Math.min(100, (item.used / item.size) * 100).toFixed(1) : 0}%"></span></div>
+                      </a>`,
+                    )
+                    .join("")}
+                </div>`
+              : emptyState(
+                  q ? "Tidak ada OTB yang cocok" : "Belum ada data OTB",
+                  q ? `Tidak ada OTB atau port yang cocok dengan “${state.sheetQuery}”.` : "Jalankan sync untuk menarik data dari Google Sheets.",
+                  "i-layers",
+                )
+          }
+        </section>`;
+    }
+
+    viewEl.innerHTML = `<div class="otb-layout">${rail}${main}</div>`;
   }
 
   // ---------------------------------------------------------------- events
@@ -2021,6 +2157,21 @@
     if (event.target.id !== "sheet-q") return;
     state.sheetQuery = event.target.value;
     const term = state.sheetQuery.trim().toLowerCase();
+    const cards = $$(".otb-card[data-search]", viewEl);
+    if (cards.length) {
+      let visible = 0;
+      for (const card of cards) {
+        const hit = !term || card.dataset.search.includes(term);
+        card.classList.toggle("is-hidden", !hit);
+        if (hit) visible += 1;
+      }
+      const counter = $("#otb-count");
+      if (counter) {
+        const total = cards.length;
+        counter.textContent = `${num(visible)}${term ? ` dari ${num(total)}` : ""} OTB`;
+      }
+      return;
+    }
     const rows = $$("tr[data-search]", viewEl);
     for (const row of rows) {
       row.classList.toggle("is-hidden", Boolean(term) && !row.dataset.search.includes(term));
