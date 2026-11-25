@@ -72,7 +72,7 @@ ul { margin: 0; padding: 0; list-style: none; }
   height: 100vh;
   padding: 0 12px;
 }
-.sidebar .brand-mark { background: #6f9fc8; color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18); }
+.sidebar .brand-mark { background: #ffffff; color: #6f9fc8; box-shadow: var(--shadow-sm); }
 .sidebar .brand-name, .sidebar .nav-item { color: rgba(255,255,255,0.92); }
 .sidebar .brand-sub, .sidebar .nav-label { color: rgba(255,255,255,0.66); }
 .sidebar .side-gauge-top, .sidebar .side-gauge-top span, .sidebar .side-gauge-note, .sidebar .side-gauge-note span, .sidebar #side-pct, .sidebar #side-count, .sidebar #side-total { color: #fff; }
