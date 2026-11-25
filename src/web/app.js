@@ -831,12 +831,11 @@
       ? `<div class="sheet-line"><span class="sheet-dot"></span><span><strong>${num(cable.sheet_used)}/${num(cable.sheet_total)} port</strong> sheet kepake (Tujuan terisi) · ${num(cable.sheet_used_cores)} core teridentifikasi</span></div>`
       : "";
     const rack = cable.tab_name || (isPlant ? "Sheet" : "Manual");
+    const code = cable.code || "";
+    const showCode = code && code !== title && !title.startsWith(code) && !code.startsWith(title);
     return `<a class="cable-card" href="#/cables/${cable.id}">
       <div class="card-rack">${esc(rack)}</div>
-      <div class="card-top">
-        <span class="code">${esc(cable.code)}</span>
-        <span class="state state-info"><span class="dot"></span>${isPlant ? "Sheet" : "Manual"}</span>
-      </div>
+      ${showCode ? `<div class="card-top"><span class="code">${esc(code)}</span></div>` : ""}
       <h3 class="cable-name">${esc(title)}</h3>
       <p class="route">${route}</p>
       <div class="fiber-strip" title="Kode warna 12 fiber TIA-598">${colors.map((hex) => `<span style="background:${hex}"></span>`).join("")}</div>
