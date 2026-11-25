@@ -406,8 +406,8 @@
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Core terpakai per area">
       <defs>
         <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#8b93ff" stop-opacity="0.32"/>
-          <stop offset="100%" stop-color="#8b93ff" stop-opacity="0"/>
+          <stop offset="0%" stop-color="#003a70" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="#003a70" stop-opacity="0"/>
         </linearGradient>
       </defs>
       ${grid}

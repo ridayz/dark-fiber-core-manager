@@ -1,23 +1,23 @@
-/* Dark Fiber Core Manager — dark dashboard, matched to Dashboard propose palette. */
+﻿/* Dark Fiber Core Manager â€” light dashboard, matched to tampilan.jpg + warna.jpg. */
 :root {
-  color-scheme: dark;
-  --bg: #141416;
-  --panel: #1c1c20;
-  --panel-2: #232328;
-  --panel-3: #2a2a31;
-  --line: #2f2f36;
-  --line-2: #3d3d46;
-  --tx: #ffffff;
-  --tx2: #d1d5db;
-  --mut: #9499a3;
-  --accent: #8b93ff;
-  --accent-ink: #10122a;
-  --accent-soft: rgba(139, 147, 255, 0.14);
-  --ok: #34d399;
-  --warn: #fbbf24;
-  --bad: #f87171;
-  --info: #60a5fa;
-  --r: 14px;
+  color-scheme: light;
+  --bg: #f3f4f6;
+  --panel: #ffffff;
+  --panel-2: #f8fafc;
+  --panel-3: #eef3f9;
+  --line: #dde3ea;
+  --line-2: #c7d2de;
+  --tx: #182230;
+  --tx2: #425466;
+  --mut: #6b7c8f;
+  --accent: #003a70;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(0, 58, 112, 0.08);
+  --ok: #1a9a6a;
+  --warn: #d97706;
+  --bad: #d03030;
+  --info: #2563eb;
+  --r: 12px;
   --mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   --sans: "Inter", "SF Pro Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
@@ -105,7 +105,7 @@ ul { margin: 0; padding: 0; list-style: none; }
   font-size: 10px;
   line-height: 1;
   color: var(--mut);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0,0,0,0.04);
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 3px 6px;
@@ -191,7 +191,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .search-pop { position: absolute; top: calc(100% + 6px); left: 0; right: 0; min-width: 360px; width: max(380px, 100%); max-height: 420px; overflow: auto; background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.5); padding: 6px; z-index: 50; }
 .sp-head { font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--mut); padding: 8px 9px 5px; font-family: var(--mono); }
 .sp-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 9px; border-radius: 8px; color: var(--tx); text-decoration: none; }
-.sp-row:hover { background: rgba(255,255,255,0.04); }
+.sp-row:hover { background: rgba(0,0,0,0.04); }
 .sp-main { min-width: 0; flex: 1; }
 .sp-title { display: block; font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-title mark { background: rgba(227,169,79,0.35); color: var(--tx); border-radius: 2px; padding: 0 1px; }
@@ -286,14 +286,14 @@ ul { margin: 0; padding: 0; list-style: none; }
 .board-col-head { display: flex; align-items: center; gap: 8px; padding: 0 2px 10px; margin-bottom: 2px; border-bottom: 1px solid var(--line); }
 .board-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .board-col-name { font-size: 10.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--tx2); font-weight: 600; }
-.board-col-count { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--mut); background: rgba(255,255,255,0.04); padding: 2px 7px; border-radius: 999px; }
+.board-col-count { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--mut); background: rgba(0,0,0,0.04); padding: 2px 7px; border-radius: 999px; }
 .board-cards { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; max-height: 320px; overflow-y: auto; padding-right: 2px; }
 .board-cards::-webkit-scrollbar { width: 4px; }
 .board-cards::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
 .site-card { display: flex; flex-direction: column; gap: 8px; padding: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: inherit; text-decoration: none; transition: border-color 0.12s var(--ease), background-color 0.12s var(--ease), transform 0.12s var(--ease); }
 .site-card:hover { border-color: var(--line-2); background: var(--panel-3); transform: translateY(-1px); }
 .site-card-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.site-avatar { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; font-size: 9px; font-weight: 700; background: rgba(255, 255, 255, 0.06); flex: none; }
+.site-avatar { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; font-size: 9px; font-weight: 700; background: rgba(0,58,112,0.06); flex: none; }
 .site-name { font-size: 12px; font-weight: 500; line-height: 1.3; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .site-card-foot { display: flex; align-items: center; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--mut); }
 .site-otb { color: var(--tx2); }
@@ -304,8 +304,8 @@ ul { margin: 0; padding: 0; list-style: none; }
 .chart-y, .chart-x { fill: var(--mut); font-size: 10px; font-family: var(--mono); }
 .chart-y { text-anchor: end; }
 .chart-x { text-anchor: middle; }
-.chart-line { fill: none; stroke: #8b93ff; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
-.chart-dot { fill: #c7cbff; stroke: #1c1c20; stroke-width: 2; }
+.chart-line { fill: none; stroke: #003a70; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.chart-dot { fill: #5a8ab5; stroke: #ffffff; stroke-width: 2; }
 .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 15px; }
 .kpi-label { font-size: 11.5px; color: var(--tx2); display: flex; align-items: center; gap: 6px; }
 .kpi-value { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 500; letter-spacing: -0.02em; margin-top: 8px; line-height: 1.1; }
@@ -467,7 +467,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .tube-name { font-family: var(--mono); font-size: 10.5px; color: var(--tx2); }
 .tube-count { font-family: var(--mono); font-size: 9.5px; color: var(--mut); }
 .cores { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
-/* Panel LC 144: 36 kolom × 4 baris, satu baris, muat layar */
+/* Panel LC 144: 36 kolom Ã— 4 baris, satu baris, muat layar */
 .panel-map-wrap { overflow: visible; padding: 0 18px 18px; }
 .panel-map { width: 100%; }
 .panel-band { width: 100%; }
@@ -791,7 +791,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .otb-card-rak { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 3px 7px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .otb-card-size { font-family: var(--mono); font-size: 10px; color: var(--mut); flex: none; }
 .otb-card-name { font-size: 12.5px; font-weight: 500; line-height: 1.4; min-height: 36px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.otb-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--mut); margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.04); }
+.otb-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--mut); margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(0,0,0,0.04); }
 .otb-card .meter { margin-top: 1px; }
 .otb-back { display: inline-block; font-size: 10.5px; color: var(--mut); margin-bottom: 5px; }
 .otb-back:hover { color: var(--accent); }
@@ -816,7 +816,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .otb-search { width: 100%; }
 }
 
-/* Sheet mirror — OTB asli di Ringkasan & Kabel Backbone -------------------- */
+/* Sheet mirror â€” OTB asli di Ringkasan & Kabel Backbone -------------------- */
 .bar-sheet { margin-top: 6px; }
 .sheet-badge { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 20px; background: rgba(63, 182, 139, 0.12); color: #7dd8b3; border: 1px solid rgba(63, 182, 139, 0.25); }
 .sheet-line { display: flex; gap: 7px; align-items: flex-start; margin-top: 8px; padding: 8px 9px; border-radius: 8px; background: rgba(63, 182, 139, 0.08); font-size: 11px; color: var(--tx2); line-height: 1.45; }
@@ -843,3 +843,4 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .bar-name.short-otb { letter-spacing: 0.01em; }
 .bar-breakdown, .metric-breakdown { font-family: var(--mono); font-size: 10px; color: #7dd8b3; margin-top: 4px; }
 .metric-breakdown { margin-bottom: 6px; }
+
