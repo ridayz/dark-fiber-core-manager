@@ -336,14 +336,101 @@
     return `<div class="loading">Memuat data…</div>`;
   }
 
+  // ---------------------------------------------------------------- site board
+  const SITE_GROUPS = [
+    { key: "jk1", label: "JK-1", accent: "#4f8cff", match: (n) => /JK[\s-]?1|JK1/i.test(n) },
+    { key: "jk2", label: "JK-2", accent: "#a78bfa", match: (n) => /JK[\s-]?2|JK2/i.test(n) },
+    { key: "jk5", label: "JK-5", accent: "#34d399", match: (n) => /JK[\s-]?5|JK5/i.test(n) },
+    { key: "surya", label: "Suryacipta", accent: "#fbbf24", match: (n) => /SURYA/i.test(n) },
+    { key: "other", label: "Lainnya", accent: "#8b98a5", match: () => true },
+  ];
+
+  function siteBoard() {
+    const tabs = (state.sheetStatus && state.sheetStatus.tabs) || [];
+    const byTab = new Map();
+    for (const row of (state.summary && state.summary.sheet_by_cable) || []) {
+      const key = row.tab_name || "";
+      const cur = byTab.get(key) || { otb: 0, cores: 0, ports: 0, portsUsed: 0 };
+      cur.otb += 1;
+      cur.cores += row.used_combined ?? row.sheet_used_cores ?? 0;
+      cur.ports += row.sheet_total || 0;
+      cur.portsUsed += row.sheet_used || 0;
+      byTab.set(key, cur);
+    }
+    const groups = SITE_GROUPS.map((g) => ({ ...g, sites: [] }));
+    for (const tab of tabs) {
+      const group = groups.find((g) => g.match(tab.name)) || groups[groups.length - 1];
+      const agg = byTab.get(tab.name) || { otb: 0, cores: 0, ports: 0, portsUsed: 0 };
+      group.sites.push({ gid: tab.gid, name: tab.name, entries: tab.entries || 0, ...agg });
+    }
+    return groups;
+  }
+
+  function siteInitials(name) {
+    const words = String(name || "?")
+      .replace(/[^A-Za-z0-9 ]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+    const initials = words.slice(0, 2).map((w) => w[0]).join("");
+    return (initials || "?").toUpperCase();
+  }
+
+  function areaChart(groups) {
+    const points = groups.map((g) => ({
+      label: g.label,
+      value: g.sites.reduce((a, site) => a + site.cores, 0),
+    }));
+    const max = Math.max(...points.map((p) => p.value), 1);
+    const W = 880;
+    const H = 250;
+    const left = 46;
+    const right = 18;
+    const top = 22;
+    const bottom = 34;
+    const innerW = W - left - right;
+    const innerH = H - top - bottom;
+    const step = points.length > 1 ? innerW / (points.length - 1) : 0;
+    const coords = points.map((p, i) => [
+      left + i * step,
+      top + innerH - (p.value / max) * innerH,
+    ]);
+    const line = coords.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+    const area = `${line} L${coords[coords.length - 1][0].toFixed(1)},${top + innerH} L${coords[0][0].toFixed(1)},${top + innerH} Z`;
+    const grid = [0, 0.5, 1].map((f) => {
+      const y = top + innerH - f * innerH;
+      return `<line x1="${left}" y1="${y.toFixed(1)}" x2="${W - right}" y2="${y.toFixed(1)}" class="chart-grid"/>
+        <text x="${left - 10}" y="${(y + 3).toFixed(1)}" class="chart-y">${num(Math.round(max * f))}</text>`;
+    }).join("");
+    const labels = coords.map(([x], i) => `<text x="${x.toFixed(1)}" y="${H - 10}" class="chart-x">${esc(points[i].label)}</text>`).join("");
+    const dots = coords.map(([x, y], i) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="chart-dot"><title>${esc(points[i].label)}: ${num(points[i].value)} core</title></circle>`).join("");
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Core terpakai per area">
+      <defs>
+        <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#6d8cff" stop-opacity="0.34"/>
+          <stop offset="100%" stop-color="#6d8cff" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      ${grid}
+      <path d="${area}" fill="url(#areaFill)"/>
+      <path d="${line}" class="chart-line"/>
+      ${dots}${labels}
+    </svg>`;
+  }
+
   // ---------------------------------------------------------------- data
   async function refreshBasics() {
-    const [summary, tenants, leases] = await Promise.all([api("/summary"), api("/tenants"), api("/leases")]);
+    const [summary, tenants, leases, sheetStatus] = await Promise.all([
+      api("/summary"),
+      api("/tenants"),
+      api("/leases"),
+      api("/sheet/status"),
+    ]);
     state.summary = summary;
     state.cables = summary.cables;
     state.plants = summary.plants || [];
     state.tenants = tenants.tenants;
     state.leases = leases.leases;
+    state.sheetStatus = sheetStatus;
     updateSidebar();
   }
 
@@ -354,6 +441,16 @@
     $("#side-total").textContent = num(totals.capacity);
     $("#side-pct").textContent = pct(totals.utilization_combined ?? totals.utilization);
     $("#side-fill").style.width = `${Math.min(100, totals.utilization_combined ?? totals.utilization)}%`;
+    const counts = {
+      cables: totals.cables,
+      otb: state.sheetStatus ? (state.sheetStatus.tabs || []).length : null,
+      tenants: totals.tenants,
+      leases: totals.leases,
+    };
+    document.querySelectorAll("[data-nav-count]").forEach((el) => {
+      const value = counts[el.dataset.navCount];
+      el.textContent = value === null || value === undefined ? "–" : num(value);
+    });
   }
 
   // ---------------------------------------------------------------- routing
@@ -365,7 +462,7 @@
 
   function updateChrome(route) {
     const titles = {
-      overview: ["Ringkasan jaringan", "Kapasitas dan utilisasi core backbone"],
+      overview: ["Ringkasan jaringan", "Site, OTB, dan utilisasi core backbone"],
       cables: ["Kabel backbone", "Perangkat OTB dari Google Sheets dan kabel manual"],
       otb: ["Peta OTB & rak", "Sinkron otomatis dari Google Sheets"],
       tenants: ["Tenant", "Pemilik lease dark fiber"],
@@ -540,50 +637,57 @@
     const maxTenant = Math.max(...s.top_tenants.map((x) => x.cores), 1);
     const leasesAttention = state.leases.filter((l) => l.state === "expiring" || l.state === "expired").length;
 
+    const groups = siteBoard();
+    const totalSites = groups.reduce((a, g) => a + g.sites.length, 0);
+
     viewEl.innerHTML = `
-      <div class="kpis">
-        ${state.plants.length ? `
-        <div class="kpi">
-          <div class="kpi-label">Perangkat plant</div>
-          <div class="kpi-value">${num(state.plants.length)}<small>panel</small></div>
-          <div class="kpi-note">Panel OTB / MDF / ODC dari Google Sheet</div>
+      <div class="board-head">
+        <div>
+          <h2 class="board-title">Site &amp; OTB</h2>
+          <p class="board-sub">Klik site untuk lihat OTB dan port-nya · ${num(totalSites)} site · ${num(t.cables)} panel · ${num(t.capacity)} core</p>
         </div>
-        <div class="kpi">
-          <div class="kpi-label">Port terdaftar</div>
-          <div class="kpi-value">${num(state.plants.reduce((a, p) => a + (p.total_ports || 0), 0))}</div>
-          <div class="kpi-note">Total baris port di semua panel</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Stasiun / gedung</div>
-          <div class="kpi-value">${num(new Set(state.plants.map((p) => p.gid)).size)}</div>
-          <div class="kpi-note">Tab sheet yang tersinkron</div>
-        </div>` : ""}
-        <div class="kpi">
-          <div class="kpi-label">Kapasitas terpasang</div>
-          <div class="kpi-value">${num(t.capacity)}<small>core</small></div>
-          <div class="kpi-note">${t.cables} kabel · ${[...new Set(cables.map((c) => c.core_count).filter(Boolean))].sort((a, b) => a - b).join(" / ")} core</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Core terpakai</div>
-          <div class="kpi-value">${num(t.used_combined ?? t.leased)}<small>core</small></div>
-          <div class="kpi-note">Utilisasi ${pct(t.utilization_combined ?? t.utilization)} · ${num(t.leased)} lease + ${num(t.sheet_only_cores ?? 0)} sheet</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Port sheet kepake</div>
-          <div class="kpi-value">${num(t.sheet_used)}<small>/${num(t.sheet_total)} port</small></div>
-          <div class="kpi-note">Tujuan terisi · ${num(t.sheet_used_cores)} core teridentifikasi · ${pct(t.sheet_port_utilization)}</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Core tersedia</div>
-          <div class="kpi-value">${num(t.available_combined ?? t.available)}<small>core</small></div>
-          <div class="kpi-note">Siap dialokasikan ke tenant</div>
-        </div>
-        <div class="kpi ${leasesAttention ? "alert" : ""}">
-          <div class="kpi-label">Lease berjalan</div>
-          <div class="kpi-value">${num(t.leases)}<small>kontrak</small></div>
-          <div class="kpi-note">${leasesAttention ? `<strong>${leasesAttention}</strong> perlu perhatian` : "Tidak ada yang mendesak"}</div>
+        <div class="board-stats">
+          <span><b>${num(t.used_combined ?? t.leased)}</b> core terpakai</span>
+          <span><b>${num(t.available_combined ?? t.available)}</b> tersedia</span>
+          <span><b>${pct(t.utilization_combined ?? t.utilization)}</b> utilisasi</span>
+          <span><b>${num(t.sheet_used)}</b>/${num(t.sheet_total)} port sheet</span>
         </div>
       </div>
+
+      <div class="board">
+        ${groups.map((g) => `
+          <div class="board-col">
+            <div class="board-col-head">
+              <span class="board-dot" style="background:${g.accent}"></span>
+              <span class="board-col-name">${esc(g.label)}</span>
+              <span class="board-col-count">${g.sites.length}</span>
+            </div>
+            <div class="board-cards">
+              ${g.sites.length ? g.sites.map((site) => `
+                <a class="site-card" href="#/otb/${encodeURIComponent(site.gid)}" title="${esc(site.name)} · ${num(site.otb)} OTB · ${num(site.cores)} core">
+                  <span class="site-card-top">
+                    <span class="site-avatar" style="color:${g.accent}">${esc(siteInitials(site.name))}</span>
+                    <span class="site-name">${esc(site.name)}</span>
+                  </span>
+                  <span class="site-card-foot">
+                    <span class="site-otb">${num(site.otb)} OTB</span>
+                    <span class="site-core">${num(site.cores)} core</span>
+                  </span>
+                </a>`).join("") : `<p class="board-empty">Belum ada site</p>`}
+            </div>
+          </div>`).join("")}
+      </div>
+
+      <section class="panel chart-panel">
+        <div class="panel-head">
+          <div>
+            <h3 class="panel-title">Core terpakai per area</h3>
+            <p class="panel-meta">Gabungan lease + port sheet yang teridentifikasi</p>
+          </div>
+          <span class="panel-meta">${num(t.used_combined ?? t.leased)} core · ${pct(t.utilization_combined ?? t.utilization)}</span>
+        </div>
+        <div class="panel-body">${areaChart(groups)}</div>
+      </section>
 
       <div class="overview-grid">
         <section class="panel">

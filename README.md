@@ -4,7 +4,7 @@
 | --- | --- |
 | **Status** | `review` |
 | **Created** | 2026-11-09 |
-| **Last touched** | 2026-11-23 |
+| **Last touched** | 2026-11-25 |
 
 ## Purpose
 
@@ -15,11 +15,12 @@ Dashboard ini adalah versi baru dari `backbone-core-dashboard`. Versi lama tidak
 ## Fitur
 
 - **Mirror sheet ke Ringkasan & Kabel Backbone (2026-11-09)** — semua data asli dari Peta OTB & rak masuk ke Ringkasan dan Kabel Backbone. Port dihitung kepake kalau kolom **Tujuan terisi** dan Port-nya ada (321/361 port, 88,9%). Nomor port di-parse jadi core: `Port 11-12` → core 11,12 teridentifikasi, `Port 27&30` → core 27,30. Total **632 core terpakai (0 lease + 632 sheet)** tersebar di 57 kabel, kapasitas **6.336 core**, utilisasi 10,0%. Angka card utama `X/Y` sekarang gabungan lease ∪ sheet (nggak 0/288 lagi). Peta core menandai core sheet sebagai **Splice/Sheet** (garis hijau) + lease tenant. Sync Google Sheet otomatis memperbarui ketiga halaman setiap 60 detik.
-- Ringkasan kapasitas real dari plant: total perangkat plant (57 panel), 361 port terdaftar, 15 stasiun, 6.336 core kapasitas.
+- **Dashboard board site (2026-11-25)** — Ringkasan sekarang berupa board 5 kolom (JK-1, JK-2, JK-5, Suryacipta, Lainnya) berisi kartu per site/tab Google Sheet. Tiap kartu menampilkan jumlah OTB dan core terpakai; klik kartu langsung membuka tab Peta OTB site tersebut (`#/otb/<gid>`). Di bawah board ada grafik area **Core terpakai per area**. Search global di topbar tetap jalan. Sidebar punya badge jumlah kabel/OTB/tenant/lease.
+- Ringkasan kapasitas real dari plant: 57 panel, 364 port sheet (326 terpakai), 15 site, 6.336 core kapasitas.
 - Distribusi core per kabel dengan warna tenant, utilisasi per ukuran core (24 / 48 / 72 / 96 / 144 / 288 / 576).
 - **Inventaris kabel berbasis plant asli** — setiap panel OTB/MDF/ODC dari Google Sheet otomatis menjadi baris `cables` (57 perangkat) saat sync. Tidak ada lagi kabel contoh.
 - Peta core per tube (12 core per tube) dengan kode warna fiber TIA-598; halaman detail menampilkan tabel port OTB dari sheet di bawah peta.
-- **Peta panel LC untuk kabel 144 core** — mode `Panel` menampilkan 36 kolom × 4 core, dibagi 2 baris (core 1–72 dan 73–144), nomor turun per kolom (kolom 1 = 1-4, kolom 2 = 5-8, dst). Ukuran lain tetap memakai tampilan tube 12 core.
+- **Peta panel LC untuk kabel 144 core** — mode `Panel` menampilkan 36 kolom × 4 core dalam **satu baris** (kolom 1 = 1-4, kolom 2 = 5-8, dst, kolom 36 = 141-144), kotak dikecilkan supaya muat layar tanpa scroll ke kanan. Ukuran lain tetap memakai tampilan tube 12 core.
 - Pilih beberapa core (klik, shift-klik untuk rentang, atau "Pilih tersedia") lalu alokasikan sekaligus ke tenant.
 - Filter peta berdasarkan status core (semua / tersedia / terpakai).
 - Manajemen tenant: tambah, edit, kontak PIC, status aktif/suspend/nonaktif (6 tenant contoh tersedia sebagai titik awal).
