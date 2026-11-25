@@ -51,13 +51,25 @@ ul { margin: 0; padding: 0; list-style: none; }
   flex: none;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--line);
-  background: var(--bg);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  background: var(--accent);
+  color: #fff;
   position: sticky;
   top: 0;
   height: 100vh;
   padding: 0 12px;
 }
+.sidebar .brand-mark { background: rgba(255,255,255,0.14); color: #fff; }
+.sidebar .brand-name, .sidebar .nav-label, .sidebar .nav-item, .sidebar .side-gauge-top, .sidebar .side-gauge-note { color: rgba(255,255,255,0.92); }
+.sidebar .brand-sub, .sidebar .nav-label, .sidebar .side-gauge-note, .sidebar .muted { color: rgba(255,255,255,0.66); }
+.sidebar .nav-item .ico { color: rgba(255,255,255,0.7); }
+.sidebar .nav-item:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.sidebar .nav-item.active { background: rgba(255,255,255,0.16); color: #fff; }
+.sidebar .nav-item.active .ico { color: #fff; }
+.sidebar .nav-item.active::before { background: #fff; }
+.sidebar .nav-count { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.18); color: rgba(255,255,255,0.9); }
+.sidebar .meter { background: rgba(255,255,255,0.18); }
+.sidebar .meter > span, .sidebar .meter-fill { background: #fff; }
 .brand {
   display: flex;
   align-items: center;
