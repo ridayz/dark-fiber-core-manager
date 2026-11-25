@@ -72,7 +72,17 @@ ul { margin: 0; padding: 0; list-style: none; }
   height: 100vh;
   padding: 0 12px;
 }
-.sidebar .brand-mark { background: #ffffff; color: #003a70; box-shadow: var(--shadow-sm); }
+.sidebar .brand-mark {
+  background: linear-gradient(180deg, #ffffff 0%, #eef4fa 100%);
+  color: #003a70;
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.06),
+    0 4px 8px rgba(0,0,0,0.08),
+    0 8px 16px rgba(0,58,112,0.12),
+    inset 0 1px 0 rgba(255,255,255,1),
+    inset 0 -2px 4px rgba(0,58,112,0.06);
+  border: 1px solid rgba(255,255,255,0.7);
+}
 .sidebar .brand-name, .sidebar .nav-item { color: rgba(255,255,255,0.92); }
 .sidebar .brand-sub, .sidebar .nav-label { color: rgba(255,255,255,0.66); }
 .sidebar .side-gauge-top, .sidebar .side-gauge-top span, .sidebar .side-gauge-note, .sidebar .side-gauge-note span, .sidebar #side-pct, .sidebar #side-count, .sidebar #side-total { color: #fff; }
