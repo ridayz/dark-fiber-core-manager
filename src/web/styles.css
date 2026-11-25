@@ -224,7 +224,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .sp-more:hover { text-decoration: underline; }
 .sp-empty { padding: 10px 9px; font-size: 11.5px; color: var(--tx2); }
 
-.view { padding: 24px 28px 56px; max-width: 1560px; width: 100%; margin: 0 auto; }
+.view { padding: 24px 28px 56px; width: 100%; margin: 0; }
 
 /* Buttons ---------------------------------------------------------------- */
 .btn {
