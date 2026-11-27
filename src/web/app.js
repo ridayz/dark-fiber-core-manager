@@ -662,9 +662,12 @@
     }
     const t = s.totals;
     const cables = s.cables.filter((c) => searchMatch(c.name, c.code, c.route));
-    const expiring = s.expiring.filter((l) => searchMatch(l.tenant_name, l.cable_name, l.batch_id));
     const maxTenant = Math.max(...s.top_tenants.map((x) => x.cores), 1);
-    const leasesAttention = state.leases.filter((l) => l.state === "expiring" || l.state === "expired").length;
+    const ss = state.sheetStatus;
+    const syncErr = ss ? (ss.tabs || []).filter((x) => x.error).length : 0;
+    const syncLabel = ss
+      ? `Sync ${fmtWhen(ss.last_sync)}${ss.syncing ? " · sedang sync" : ""}${syncErr ? ` · ${syncErr} tab error` : ""}`
+      : "Sync sheet belum tersedia";
 
     const groups = siteBoard();
     const totalSites = groups.reduce((a, g) => a + g.sites.length, 0);
@@ -674,6 +677,7 @@
         <div>
           <h2 class="board-title">Site &amp; OTB</h2>
           <p class="board-sub">Klik site untuk lihat OTB dan port-nya · ${num(totalSites)} site · ${num(t.cables)} panel · ${num(t.capacity)} core</p>
+          <p class="board-sync ${syncErr ? "board-sync-warn" : ""}"><svg class="ico"><use href="#i-clock"/></svg><span>${esc(syncLabel)}</span></p>
         </div>
         <div class="board-stats">
           <span><b>${num(t.used_combined ?? t.leased)}</b> core terpakai</span>
@@ -748,32 +752,6 @@
         </section>
 
         <div class="overview-side">
-          <section class="panel">
-            <div class="panel-head">
-              <div>
-                <h3 class="panel-title">Sewa berakhir</h3>
-                <p class="panel-meta">≤ 30 hari atau sudah lewat</p>
-              </div>
-              <a class="panel-link" href="#/leases">Lease <svg class="ico"><use href="#i-chevron"/></svg></a>
-            </div>
-            <div class="panel-body">
-              ${expiring.length ? `<div class="exp-list">
-                ${expiring.map((l) => `
-                  <button type="button" class="exp-row" data-lease-open="${esc(l.batch_id)}">
-                    <span class="dot" style="color:${l.tenant_color}"></span>
-                    <span class="exp-main">
-                      <span class="exp-name">${esc(l.tenant_name)}</span>
-                      <span class="exp-meta">${esc(l.cable_name)} · ${num(l.core_count)} core</span>
-                    </span>
-                    <span class="exp-side">
-                      <span class="exp-date">${fmtDate(l.end_date)}</span>
-                      <span class="exp-days ${remainingTone(l)}">${remainingLabel(l)}</span>
-                    </span>
-                  </button>`).join("")}
-              </div>` : emptyState("Tidak ada sewa mendesak", "Semua lease masih jauh dari jatuh tempo", "i-check")}
-            </div>
-          </section>
-
           <section class="panel">
             <div class="panel-head">
               <h3 class="panel-title">Tenant teratas</h3>
