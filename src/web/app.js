@@ -1000,9 +1000,23 @@
 
   // Tata letak fisik panel OTB:
   // 144 core -> panel LC fisik OTB 192: 24 kolom x 4 core x 2 baris (1-96, 97-192).
+  // 72 core -> panel LC fisik OTB 96: 4 kolom besar (2x2), tiap kolom 24 core.
+  // Pola 24 core: 12 kolom kecil x 3 baris, staggered (3 di atas 4, 7 di atas 8, dst).
   // 288 core -> panel LC fisik OTB 288: 12 kolom ke samping, tiap kolom 24 core.
-  // Nomor dibaca 4 core ke samping lalu turun: 1-4, 5-8, ... 21-24, lanjut kolom berikutnya 25-48, dst.
   function panelLayout(cable) {
+    if (cable.core_count === 72) {
+      return {
+        order: "staggered",
+        bigCols: 2,
+        bigRows: 2,
+        smallCols: 12,
+        slotRows: 3,
+        perBigCol: 24,
+        total: 96,
+        meta: "Panel OTB 72 (fisik 96) · 4 kolom × 24 core",
+        foot: "Panel LC: pola staggered, 1 kolom = 24 core (1-4, 5-8, ... 21-24), 4 kolom 2×2, slot 73-96 void",
+      };
+    }
     if (cable.core_count === 144) {
       return {
         cols: 24,
@@ -1034,6 +1048,45 @@
         ? coreCell(core, cable)
         : `<span class="core core-void" title="Core ${no}" aria-hidden="true">${no}</span>`;
     };
+
+    // 72 core: fisik 96, 4 kolom besar 2x2, tiap kolom 24 core pola staggered.
+    if (layout.order === "staggered") {
+      const bigCols = [];
+      for (let bc = 0; bc < layout.bigCols * layout.bigRows; bc += 1) {
+        const base = bc * layout.perBigCol;
+        const smallCols = [];
+        for (let sc = 0; sc < layout.smallCols; sc += 1) {
+          const pair = Math.floor(sc / 2);
+          const n = base + pair * 4;
+          let top = null;
+          let mid = null;
+          let bot = null;
+          if (sc % 2 === 0) {
+            mid = n + 1;
+            bot = n + 2;
+          } else {
+            top = n + 3;
+            mid = n + 4;
+          }
+          const slot = (no) => no && no <= layout.total
+            ? cellAt(no)
+            : `<span class="core-slot-empty" aria-hidden="true"></span>`;
+          smallCols.push(
+            `<div class="panel-col-72">${slot(top)}${slot(mid)}${slot(bot)}</div>`,
+          );
+        }
+        const first = base + 1;
+        const last = base + layout.perBigCol;
+        const voidClass = first > cable.core_count ? " panel-72-big-void" : "";
+        bigCols.push(
+          `<div class="panel-72-big${voidClass}" title="Kolom ${bc + 1} · core ${first}–${last}${first > cable.core_count ? " (void)" : ""}">
+            <div class="panel-72-big-label">Kolom ${bc + 1} · ${first}–${last}</div>
+            <div class="panel-72-big-grid">${smallCols.join("")}</div>
+          </div>`,
+        );
+      }
+      return `<div class="panel-map-wrap"><div class="panel-map panel-map-72">${bigCols.join("")}</div></div>`;
+    }
 
     // 288 core: 12 kolom ke samping, tiap kolom 4 core ke samping x 6 baris = 24 core.
     if (layout.order === "grid") {
