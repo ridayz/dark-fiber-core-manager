@@ -901,7 +901,7 @@
     `;
   }
 
-  function cableMapSection(cable, { showTray = true } = {}) {
+  function cableMapSection(cable, { showTray = true, readOnly = false } = {}) {
     const c = cable;
     const used = c.used_combined ?? c.leased;
     const free = c.available_combined ?? c.available;
@@ -922,7 +922,7 @@
         <div class="map-toolbar">
           <div>
             <h3 class="panel-title">Peta core</h3>
-            <p class="panel-meta">${showPanel ? layout.meta : `${c.tubes.length} tube × 12 core`} · klik core untuk memilih · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
+            <p class="panel-meta">${showPanel ? layout.meta : `${c.tubes.length} tube × 12 core`}${readOnly ? "" : " · klik core untuk memilih"} · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
           </div>
           <div class="map-tools">
             ${layout ? `<div class="segmented" role="group" aria-label="Tampilan peta">
@@ -934,8 +934,8 @@
               <button class="seg-btn ${state.coreFilter === "available" ? "active" : ""}" data-action="filter-core" data-filter="available">Tersedia</button>
               <button class="seg-btn ${state.coreFilter === "used" ? "active" : ""}" data-action="filter-core" data-filter="used">Terpakai</button>
             </div>
-            <button class="btn btn-ghost btn-sm" data-action="select-available">Pilih tersedia</button>
-            <button class="btn btn-ghost btn-sm" data-action="select-clear">Bersihkan</button>
+            ${readOnly ? "" : `<button class="btn btn-ghost btn-sm" data-action="select-available">Pilih tersedia</button>
+            <button class="btn btn-ghost btn-sm" data-action="select-clear">Bersihkan</button>`}
           </div>
         </div>
         <div class="map-legend">
@@ -944,8 +944,8 @@
           ${tenantChips}
         </div>
         ${showPanel
-          ? panelMap(c)
-          : `<div class="tube-grid">${c.tubes.map((tube) => tubeCard(tube, c)).join("")}</div>`}
+          ? panelMap(c, readOnly)
+          : `<div class="tube-grid">${c.tubes.map((tube) => tubeCard(tube, c, readOnly)).join("")}</div>`}
         <div class="map-foot">
           <span>${showPanel ? layout.foot : "Garis bawah tiap core mengikuti kode warna 12 fiber TIA-598"}</span>
           <span>${num(used)} terpakai · ${num(free)} tersedia</span>
@@ -1077,13 +1077,13 @@
     return null;
   }
 
-  function panelMap(cable) {
+  function panelMap(cable, readOnly = false) {
     const layout = panelLayout(cable);
     if (!layout) return "";
     const cellAt = (no) => {
       const core = state.coreIndex.get(no);
       return core
-        ? coreCell(core, cable)
+        ? coreCell(core, cable, readOnly)
         : `<span class="core core-void" title="Core ${no}" aria-hidden="true">${no}</span>`;
     };
 
@@ -1174,7 +1174,7 @@
     return `<div class="panel-map-wrap"><div class="${className}">${bandHtml.join("")}</div></div>`;
   }
 
-  function tubeCard(tube, cable) {
+  function tubeCard(tube, cable, readOnly = false) {
     const used = tube.cores.filter((c) => c.allocation || c.sheet).length;
     const leased = tube.cores.filter((c) => c.allocation).length;
     return `<div class="tube">
@@ -1183,13 +1183,13 @@
         <span class="tube-count" title="${leased} lease + ${used - leased} sheet">${used}/12</span>
       </div>
       <div class="cores">
-        ${tube.cores.map((core) => coreCell(core, cable)).join("")}
+        ${tube.cores.map((core) => coreCell(core, cable, readOnly)).join("")}
       </div>
     </div>`;
   }
 
-  function coreCell(core, cable) {
-    const selected = state.selection.has(core.no);
+  function coreCell(core, cable, readOnly = false) {
+    const selected = !readOnly && state.selection.has(core.no);
     const occupied = Boolean(core.allocation || core.sheet);
     const dim =
       (state.coreFilter === "available" && occupied) || (state.coreFilter === "used" && !occupied);
@@ -1198,6 +1198,7 @@
     else if (core.sheet) classes.push("sheet");
     if (selected) classes.push("selected");
     if (dim) classes.push("dim");
+    if (readOnly) classes.push("core-readonly");
 
     let title;
     if (core.allocation) {
@@ -1214,9 +1215,11 @@
     else if (core.sheet) style = `background:repeating-linear-gradient(45deg, #2a3431 0 5px, #1f2a27 5px 10px);box-shadow:inset 0 0 0 1px #3fb68b`;
     else style = `box-shadow:inset 0 -2px 0 ${core.color}`;
 
-    return `<button type="button" class="${classes.join(" ")}" data-core="${core.no}" data-tube="${core.tube}"
+    const tag = readOnly ? "span" : "button";
+    const attrs = readOnly ? "" : ` type="button" data-core="${core.no}" data-tube="${core.tube}" aria-label="${esc(title)}"`;
+    return `<${tag} class="${classes.join(" ")}"${attrs}
       style="${style}"
-      title="${esc(title)}" aria-label="${esc(title)}">${core.no}</button>`;
+      title="${esc(title)}">${core.no}</${tag}>`;
   }
 
   function renderTenantsView() {
@@ -2117,7 +2120,7 @@
 
           ${errorCard}
 
-          ${mapCable ? cableMapSection(mapCable, { showTray: false }) : ""}
+          ${mapCable ? cableMapSection(mapCable, { showTray: false, readOnly: true }) : ""}
 
           ${
             detail.rows.length
