@@ -220,6 +220,38 @@ def get_conn(db_path: str | None = None):
                 lastrowid = r.get("last_insert_rowid")
                 return _CursorResult(rows=rows, lastrowid=lastrowid)
 
+            def fetch_many(self, queries):
+                """Pipeline several read statements into a single HTTP round trip."""
+                reqs = []
+                for sql, params in queries:
+                    stmt = {"sql": sql}
+                    p = list(params or ())
+                    if p:
+                        stmt["args"] = [_turso_arg(v) for v in p]
+                    reqs.append({"type": "execute", "stmt": stmt})
+                data = self._post(reqs)
+                results = data.get("results", [])
+                if len(results) < len(reqs):
+                    # Pipeline returned fewer results than statements: fall back
+                    # to one round trip per query instead of guessing.
+                    return [self.execute(sql, params) for sql, params in queries]
+                results = results[: len(reqs)]
+                out = []
+                for res in results:
+                    if res.get("type") == "error":
+                        err = res.get("error", {})
+                        raise RuntimeError(err.get("message") or str(err))
+                    r = res.get("response", {}).get("result", {})
+                    cols = [c.get("name") for c in r.get("cols", [])]
+                    rows = []
+                    for row in r.get("rows", []):
+                        obj = _Row()
+                        for i, col in enumerate(cols):
+                            obj[col] = _turso_val(row[i])
+                        rows.append(obj)
+                    out.append(_CursorResult(rows=rows, lastrowid=r.get("last_insert_rowid")))
+                return out
+
             def executemany(self, sql: str, seq):
                 last = None
                 for params in seq:
@@ -382,23 +414,33 @@ def init_db(db_path: str | None = None, seed: bool = True) -> None:
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
-    """Add columns that older databases do not have yet."""
+    """Add columns that older databases do not have yet.
+
+    The ALTER/CREATE statements go out as one batched round trip: on Turso
+    every ``execute`` is an HTTP call, and cold starts paid ~8 of them.
+    """
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(cables)")}
-    for name, ddl in (
-        ("gid", "TEXT"),
-        ("panel_code", "TEXT"),
-        ("section", "TEXT"),
-        ("total_ports", "INTEGER NOT NULL DEFAULT 0"),
-        ("tab_name", "TEXT"),
-        ("synced_at", "TEXT"),
-    ):
-        if name not in columns:
-            conn.execute(f"ALTER TABLE cables ADD COLUMN {name} {ddl}")
-    conn.execute(
-        """CREATE UNIQUE INDEX IF NOT EXISTS idx_cable_plant
-           ON cables(gid, panel_code)
-           WHERE gid IS NOT NULL AND panel_code IS NOT NULL"""
+    pending = [
+        (f"ALTER TABLE cables ADD COLUMN {name} {ddl}", ())
+        for name, ddl in (
+            ("gid", "TEXT"),
+            ("panel_code", "TEXT"),
+            ("section", "TEXT"),
+            ("total_ports", "INTEGER NOT NULL DEFAULT 0"),
+            ("tab_name", "TEXT"),
+            ("synced_at", "TEXT"),
+        )
+        if name not in columns
+    ]
+    pending.append(
+        (
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_cable_plant
+               ON cables(gid, panel_code)
+               WHERE gid IS NOT NULL AND panel_code IS NOT NULL""",
+            (),
+        )
     )
+    fetch_many(conn, pending)
 
 
 def seed_demo(conn: sqlite3.Connection) -> None:
@@ -564,99 +606,139 @@ def _cable_stats(conn: sqlite3.Connection, cable: sqlite3.Row, ref: date) -> dic
     }
 
 
-def list_cables(conn: sqlite3.Connection) -> list[dict]:
-    ref = today()
-    rows = conn.execute(
-        "SELECT * FROM cables ORDER BY (gid IS NULL), core_count DESC, name"
-    ).fetchall()
-    if not rows:
-        return []
+# ---------------------------------------------------------------- batching
+# Turso is reached over HTTP, so every statement is a full round trip
+# (~0.9 s from the Vercel function). Read endpoints therefore batch their
+# independent queries into a single pipeline request instead of N+1 calls.
 
-    # Bulk fetch to avoid N+1 round trips (important for Turso HTTP).
-    used_counts: dict[int, int] = {}
-    for r in conn.execute(
-        "SELECT cable_id, COUNT(*) AS c FROM allocations WHERE released_at IS NULL GROUP BY cable_id"
-    ).fetchall():
-        used_counts[r["cable_id"]] = r["c"]
+CABLE_LIST_SQL = "SELECT * FROM cables ORDER BY (gid IS NULL), core_count DESC, name"
+ALLOC_COUNT_SQL = (
+    "SELECT cable_id, COUNT(*) AS c FROM allocations "
+    "WHERE released_at IS NULL GROUP BY cable_id"
+)
+ALLOC_CORE_SQL = "SELECT cable_id, core_no FROM allocations WHERE released_at IS NULL"
+SHEET_PANEL_SQL = (
+    "SELECT gid, panel, port, destination, note, section FROM sheet_entries "
+    "WHERE gid IN ({ph})"
+)
 
+
+def fetch_many(conn, queries):
+    """Run independent read queries, one round trip when the driver allows it."""
+    batch = getattr(conn, "fetch_many", None)
+    if callable(batch):
+        return batch(queries)
+    return [conn.execute(sql, params or ()).fetchall() for sql, params in queries]
+
+
+def _index_allocs(count_rows, core_rows):
+    used_counts = {r["cable_id"]: r["c"] for r in count_rows}
     leased_cores: dict[int, set[int]] = {}
-    for r in conn.execute(
-        "SELECT cable_id, core_no FROM allocations WHERE released_at IS NULL"
-    ).fetchall():
+    for r in core_rows:
         leased_cores.setdefault(r["cable_id"], set()).add(r["core_no"])
+    return used_counts, leased_cores
 
-    gids = {r["gid"] for r in rows if r["gid"]}
-    sheet_rows_by_panel: dict[tuple[str, str], list] = {}
-    if gids:
-        ph = ",".join("?" for _ in gids)
-        for r in conn.execute(
-            f"SELECT gid, panel, port, destination, note, section FROM sheet_entries WHERE gid IN ({ph})",
-            tuple(gids),
-        ).fetchall():
-            key = (r["gid"], r["panel"] or "")
-            sheet_rows_by_panel.setdefault(key, []).append(r)
 
+def _sheet_rows_query(gids):
+    ph = ",".join("?" for _ in gids)
+    return SHEET_PANEL_SQL.format(ph=ph), tuple(gids)
+
+
+def _group_sheet_rows(rows):
+    grouped: dict[tuple[str, str], list] = {}
+    for r in rows:
+        grouped.setdefault((r["gid"], r["panel"] or ""), []).append(r)
+    return grouped
+
+
+def _fetch_sheet_panels(conn, gids):
+    if not gids:
+        return {}
+    (rows,) = fetch_many(conn, [_sheet_rows_query(gids)])
+    return _group_sheet_rows(rows)
+
+
+def _build_cable(cable, used, leased_set, srows):
+    total = cable["core_count"] or 0
+    counted = [r for r in srows if (r["port"] or "").strip()]
+    sheet_total = len(counted)
+    sheet_map: dict[int, dict] = {}
+    used_set: set[int] = set()
+    for r in counted:
+        if not (r["destination"] or "").strip():
+            continue
+        for n in parse_port_numbers(r["port"] or ""):
+            if total and n > total:
+                continue
+            used_set.add(n)
+            if n not in sheet_map:
+                sheet_map[n] = {
+                    "port": r["port"],
+                    "destination": r["destination"],
+                    "note": r["note"],
+                    "section": r["section"],
+                }
+    sheet_used = len([r for r in counted if (r["destination"] or "").strip()])
+    sheet_used_cores = len(used_set)
+    sheet_only = sum(1 for n in sheet_map if n not in leased_set)
+    combined = used + sheet_only
+    return {
+        "id": cable["id"],
+        "code": cable["code"],
+        "name": cable["name"],
+        "route": cable["route"],
+        "core_count": total,
+        "length_km": cable["length_km"],
+        "installed_year": cable["installed_year"],
+        "status": cable["status"],
+        "notes": cable["notes"],
+        "gid": cable["gid"],
+        "panel_code": cable["panel_code"],
+        "section": cable["section"],
+        "total_ports": cable["total_ports"] or 0,
+        "tab_name": cable["tab_name"],
+        "synced_at": cable["synced_at"],
+        "source": "sheet" if cable["gid"] else "manual",
+        "leased": used,
+        "available": total - used,
+        "utilization": round(used / total * 100, 1) if total else 0,
+        "used_combined": combined,
+        "available_combined": total - combined,
+        "utilization_combined": round(combined / total * 100, 1) if total else 0,
+        "sheet_total": sheet_total,
+        "sheet_used": sheet_used,
+        "sheet_used_cores": sheet_used_cores,
+        "sheet_utilization": round(sheet_used_cores / total * 100, 1) if total else 0,
+        "sheet_port_utilization": round(sheet_used / sheet_total * 100, 1) if sheet_total else 0,
+        "sheet_only_cores": sheet_only,
+    }
+
+
+def _build_cables(rows, used_counts, leased_cores, sheet_rows_by_panel):
     out = []
     for cable in rows:
-        total = cable["core_count"] or 0
-        used = used_counts.get(cable["id"], 0)
         gid, panel_code = cable["gid"], cable["panel_code"]
         srows = sheet_rows_by_panel.get((gid, panel_code), []) if gid and panel_code else []
-        counted = [r for r in srows if (r["port"] or "").strip()]
-        sheet_total = len(counted)
-        sheet_map: dict[int, dict] = {}
-        used_set: set[int] = set()
-        for r in counted:
-            if not (r["destination"] or "").strip():
-                continue
-            for n in parse_port_numbers(r["port"] or ""):
-                if total and n > total:
-                    continue
-                used_set.add(n)
-                if n not in sheet_map:
-                    sheet_map[n] = {
-                        "port": r["port"],
-                        "destination": r["destination"],
-                        "note": r["note"],
-                        "section": r["section"],
-                    }
-        sheet_used = len([r for r in counted if (r["destination"] or "").strip()])
-        sheet_used_cores = len(used_set)
-        leased_set = leased_cores.get(cable["id"], set())
-        sheet_only = sum(1 for n in sheet_map if n not in leased_set)
-        combined = used + sheet_only
-        out.append({
-            "id": cable["id"],
-            "code": cable["code"],
-            "name": cable["name"],
-            "route": cable["route"],
-            "core_count": total,
-            "length_km": cable["length_km"],
-            "installed_year": cable["installed_year"],
-            "status": cable["status"],
-            "notes": cable["notes"],
-            "gid": cable["gid"],
-            "panel_code": cable["panel_code"],
-            "section": cable["section"],
-            "total_ports": cable["total_ports"] or 0,
-            "tab_name": cable["tab_name"],
-            "synced_at": cable["synced_at"],
-            "source": "sheet" if cable["gid"] else "manual",
-            "leased": used,
-            "available": total - used,
-            "utilization": round(used / total * 100, 1) if total else 0,
-            "used_combined": combined,
-            "available_combined": total - combined,
-            "utilization_combined": round(combined / total * 100, 1) if total else 0,
-            "sheet_total": sheet_total,
-            "sheet_used": sheet_used,
-            "sheet_used_cores": sheet_used_cores,
-            "sheet_utilization": round(sheet_used_cores / total * 100, 1) if total else 0,
-            "sheet_port_utilization": round(sheet_used / sheet_total * 100, 1) if sheet_total else 0,
-            "sheet_only_cores": sheet_only,
-        })
+        out.append(
+            _build_cable(
+                cable,
+                used_counts.get(cable["id"], 0),
+                leased_cores.get(cable["id"], set()),
+                srows,
+            )
+        )
     return out
 
+
+def list_cables(conn: sqlite3.Connection) -> list[dict]:
+    rows, count_rows, core_rows = fetch_many(
+        conn, [(CABLE_LIST_SQL, ()), (ALLOC_COUNT_SQL, ()), (ALLOC_CORE_SQL, ())]
+    )
+    if not rows:
+        return []
+    used_counts, leased_cores = _index_allocs(count_rows, core_rows)
+    panels = _fetch_sheet_panels(conn, {r["gid"] for r in rows if r["gid"]})
+    return _build_cables(rows, used_counts, leased_cores, panels)
 
 def get_cable(conn: sqlite3.Connection, cable_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM cables WHERE id = ?", (cable_id,)).fetchone()
@@ -738,21 +820,20 @@ def get_cable(conn: sqlite3.Connection, cable_id: int) -> dict | None:
     return cable
 
 
-def list_tenants(conn: sqlite3.Connection) -> list[dict]:
-    ref = today()
-    rows = conn.execute("SELECT * FROM tenants ORDER BY name").fetchall()
+TENANT_LIST_SQL = "SELECT * FROM tenants ORDER BY name"
+TENANT_AGG_SQL = (
+    "SELECT tenant_id, COUNT(*) AS cores, COUNT(DISTINCT cable_id) AS cables, "
+    "COUNT(DISTINCT batch_id) AS leases, "
+    "MIN(CASE WHEN end_date >= ? THEN end_date END) AS next_end "
+    "FROM allocations WHERE released_at IS NULL GROUP BY tenant_id"
+)
+
+
+def _build_tenants(rows, aggs):
+    by_id = {a["tenant_id"]: a for a in aggs}
     out = []
     for r in rows:
-        agg = conn.execute(
-            """SELECT COUNT(*) AS cores, COUNT(DISTINCT cable_id) AS cables,
-                      MIN(CASE WHEN end_date >= ? THEN end_date END) AS next_end
-               FROM allocations WHERE tenant_id = ? AND released_at IS NULL""",
-            (iso(ref), r["id"]),
-        ).fetchone()
-        leases = conn.execute(
-            "SELECT DISTINCT batch_id FROM allocations WHERE tenant_id = ? AND released_at IS NULL",
-            (r["id"],),
-        ).fetchall()
+        agg = by_id.get(r["id"])
         out.append(
             {
                 "id": r["id"],
@@ -765,14 +846,20 @@ def list_tenants(conn: sqlite3.Connection) -> list[dict]:
                 "notes": r["notes"],
                 "color": tenant_color(r["id"]),
                 "created_at": r["created_at"],
-                "cores": agg["cores"],
-                "cables": agg["cables"],
-                "leases": len(leases),
-                "next_end": agg["next_end"],
+                "cores": agg["cores"] if agg else 0,
+                "cables": agg["cables"] if agg else 0,
+                "leases": agg["leases"] if agg else 0,
+                "next_end": agg["next_end"] if agg else None,
             }
         )
     return out
 
+
+def list_tenants(conn: sqlite3.Connection) -> list[dict]:
+    rows, aggs = fetch_many(
+        conn, [(TENANT_LIST_SQL, ()), (TENANT_AGG_SQL, (iso(today()),))]
+    )
+    return _build_tenants(rows, aggs)
 
 def get_tenant(conn: sqlite3.Connection, tenant_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM tenants WHERE id = ?", (tenant_id,)).fetchone()
@@ -828,18 +915,19 @@ def _core_label(core_nos: list[int]) -> str:
     return ", ".join(parts)
 
 
-def list_leases(conn: sqlite3.Connection, ref: date | None = None) -> list[dict]:
-    ref = ref or today()
-    rows = conn.execute(
-        """SELECT a.batch_id, a.tenant_id, a.cable_id, a.purpose, a.start_date, a.end_date,
-                  a.notes, t.name AS tenant_name, c.name AS cable_name, c.code AS cable_code,
-                  a.core_no
-           FROM allocations a
-           JOIN tenants t ON t.id = a.tenant_id
-           JOIN cables c ON c.id = a.cable_id
-           WHERE a.released_at IS NULL
-           ORDER BY a.end_date, a.batch_id, a.core_no"""
-    ).fetchall()
+LEASE_LIST_SQL = (
+    "SELECT a.batch_id, a.tenant_id, a.cable_id, a.purpose, a.start_date, a.end_date, "
+    "a.notes, t.name AS tenant_name, c.name AS cable_name, c.code AS cable_code, "
+    "a.core_no "
+    "FROM allocations a "
+    "JOIN tenants t ON t.id = a.tenant_id "
+    "JOIN cables c ON c.id = a.cable_id "
+    "WHERE a.released_at IS NULL "
+    "ORDER BY a.end_date, a.batch_id, a.core_no"
+)
+
+
+def _build_leases(rows, ref):
     grouped: dict[str, dict] = {}
     for r in rows:
         item = grouped.get(r["batch_id"])
@@ -871,29 +959,41 @@ def list_leases(conn: sqlite3.Connection, ref: date | None = None) -> list[dict]
     return out
 
 
-def list_plants(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute(
-        """SELECT id, gid, panel_code, core_count, route, notes, total_ports, status, synced_at
-           FROM cable_plants
-           ORDER BY synced_at DESC, panel_code"""
-    ).fetchall()
+def list_leases(conn: sqlite3.Connection, ref: date | None = None) -> list[dict]:
+    ref = ref or today()
+    (rows,) = fetch_many(conn, [(LEASE_LIST_SQL, ())])
+    return _build_leases(rows, ref)
+
+PLANT_LIST_SQL = (
+    "SELECT id, gid, panel_code, core_count, route, notes, total_ports, status, synced_at "
+    "FROM cable_plants ORDER BY synced_at DESC, panel_code"
+)
+
+
+def _build_plants(rows):
     names = dict(sheets.TABS)
     out = []
     for r in rows:
-        out.append({
-            "id": r["id"],
-            "gid": r["gid"],
-            "panel_code": r["panel_code"],
-            "core_count": r["core_count"] or 0,
-            "route": r["route"],
-            "notes": r["notes"],
-            "total_ports": r["total_ports"] or 0,
-            "status": r["status"],
-            "synced_at": r["synced_at"],
-            "tab_name": names.get(r["gid"], r["gid"]),
-        })
+        out.append(
+            {
+                "id": r["id"],
+                "gid": r["gid"],
+                "panel_code": r["panel_code"],
+                "core_count": r["core_count"] or 0,
+                "route": r["route"],
+                "notes": r["notes"],
+                "total_ports": r["total_ports"] or 0,
+                "status": r["status"],
+                "synced_at": r["synced_at"],
+                "tab_name": names.get(r["gid"], r["gid"]),
+            }
+        )
     return out
 
+
+def list_plants(conn: sqlite3.Connection) -> list[dict]:
+    (rows,) = fetch_many(conn, [(PLANT_LIST_SQL, ())])
+    return _build_plants(rows)
 
 def get_plant(conn: sqlite3.Connection, plant_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM cable_plants WHERE id = ?", (plant_id,)).fetchone()
@@ -907,19 +1007,47 @@ def get_plant(conn: sqlite3.Connection, plant_id: int) -> dict | None:
     return plant
 
 
+MIX_SQL = (
+    "SELECT a.cable_id, a.tenant_id, t.name AS tenant_name, COUNT(*) AS cores "
+    "FROM allocations a JOIN tenants t ON t.id = a.tenant_id "
+    "WHERE a.released_at IS NULL "
+    "GROUP BY a.cable_id, a.tenant_id "
+    "ORDER BY cores DESC"
+)
+
+
 def summary(conn: sqlite3.Connection) -> dict:
     ref = today()
-    cables = list_cables(conn)
-    tenants = list_tenants(conn)
-    leases = list_leases(conn, ref)
+    (
+        cable_rows,
+        count_rows,
+        core_rows,
+        tenant_rows,
+        tenant_aggs,
+        lease_rows,
+        mix_rows,
+        plant_rows,
+    ) = fetch_many(
+        conn,
+        [
+            (CABLE_LIST_SQL, ()),
+            (ALLOC_COUNT_SQL, ()),
+            (ALLOC_CORE_SQL, ()),
+            (TENANT_LIST_SQL, ()),
+            (TENANT_AGG_SQL, (iso(ref),)),
+            (LEASE_LIST_SQL, ()),
+            (MIX_SQL, ()),
+            (PLANT_LIST_SQL, ()),
+        ],
+    )
 
-    mix_rows = conn.execute(
-        """SELECT a.cable_id, a.tenant_id, t.name AS tenant_name, COUNT(*) AS cores
-           FROM allocations a JOIN tenants t ON t.id = a.tenant_id
-           WHERE a.released_at IS NULL
-           GROUP BY a.cable_id, a.tenant_id
-           ORDER BY cores DESC"""
-    ).fetchall()
+    used_counts, leased_cores = _index_allocs(count_rows, core_rows)
+    panels = _fetch_sheet_panels(conn, {r["gid"] for r in cable_rows if r["gid"]})
+    cables = _build_cables(cable_rows, used_counts, leased_cores, panels)
+    tenants = _build_tenants(tenant_rows, tenant_aggs)
+    leases = _build_leases(lease_rows, ref)
+    plants = _build_plants(plant_rows)
+
     mix: dict[int, list] = {}
     for r in mix_rows:
         mix.setdefault(r["cable_id"], []).append(
@@ -936,7 +1064,7 @@ def summary(conn: sqlite3.Connection) -> dict:
     capacity = sum(c["core_count"] for c in cables)
     leased = sum(c["leased"] for c in cables)
     expiring = [l for l in leases if l["state"] in ("expiring", "expired")]
-    # Sheet mirror totals — data asli dari Peta OTB (Tujuan terisi = kepake)
+    # Sheet mirror totals - data asli dari Peta OTB (Tujuan terisi = kepake)
     sheet_total = sum(c.get("sheet_total", 0) for c in cables)
     sheet_used = sum(c.get("sheet_used", 0) for c in cables)
     sheet_used_cores = sum(c.get("sheet_used_cores", 0) for c in cables)
@@ -997,9 +1125,8 @@ def summary(conn: sqlite3.Connection) -> dict:
             }
             for size in sorted({c["core_count"] for c in cables if c["core_count"]})
         ],
-        "plants": list_plants(conn),
+        "plants": plants,
     }
-
 
 # ---------------------------------------------------------------------------
 # Mutations
