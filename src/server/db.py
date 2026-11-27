@@ -32,6 +32,9 @@ class _CursorResult:
     def fetchall(self):
         return list(self._rows)
 
+    def __iter__(self):
+        return iter(self._rows)
+
 
 def _turso_arg(v):
     if v is None:
