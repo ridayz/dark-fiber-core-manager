@@ -569,7 +569,93 @@ def list_cables(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM cables ORDER BY (gid IS NULL), core_count DESC, name"
     ).fetchall()
-    return [_cable_stats(conn, r, ref) for r in rows]
+    if not rows:
+        return []
+
+    # Bulk fetch to avoid N+1 round trips (important for Turso HTTP).
+    used_counts: dict[int, int] = {}
+    for r in conn.execute(
+        "SELECT cable_id, COUNT(*) AS c FROM allocations WHERE released_at IS NULL GROUP BY cable_id"
+    ).fetchall():
+        used_counts[r["cable_id"]] = r["c"]
+
+    leased_cores: dict[int, set[int]] = {}
+    for r in conn.execute(
+        "SELECT cable_id, core_no FROM allocations WHERE released_at IS NULL"
+    ).fetchall():
+        leased_cores.setdefault(r["cable_id"], set()).add(r["core_no"])
+
+    gids = {r["gid"] for r in rows if r["gid"]}
+    sheet_rows_by_panel: dict[tuple[str, str], list] = {}
+    if gids:
+        ph = ",".join("?" for _ in gids)
+        for r in conn.execute(
+            f"SELECT gid, panel, port, destination, note, section FROM sheet_entries WHERE gid IN ({ph})",
+            tuple(gids),
+        ).fetchall():
+            key = (r["gid"], r["panel"] or "")
+            sheet_rows_by_panel.setdefault(key, []).append(r)
+
+    out = []
+    for cable in rows:
+        total = cable["core_count"] or 0
+        used = used_counts.get(cable["id"], 0)
+        gid, panel_code = cable["gid"], cable["panel_code"]
+        srows = sheet_rows_by_panel.get((gid, panel_code), []) if gid and panel_code else []
+        counted = [r for r in srows if (r["port"] or "").strip()]
+        sheet_total = len(counted)
+        sheet_map: dict[int, dict] = {}
+        used_set: set[int] = set()
+        for r in counted:
+            if not (r["destination"] or "").strip():
+                continue
+            for n in parse_port_numbers(r["port"] or ""):
+                if total and n > total:
+                    continue
+                used_set.add(n)
+                if n not in sheet_map:
+                    sheet_map[n] = {
+                        "port": r["port"],
+                        "destination": r["destination"],
+                        "note": r["note"],
+                        "section": r["section"],
+                    }
+        sheet_used = len([r for r in counted if (r["destination"] or "").strip()])
+        sheet_used_cores = len(used_set)
+        leased_set = leased_cores.get(cable["id"], set())
+        sheet_only = sum(1 for n in sheet_map if n not in leased_set)
+        combined = used + sheet_only
+        out.append({
+            "id": cable["id"],
+            "code": cable["code"],
+            "name": cable["name"],
+            "route": cable["route"],
+            "core_count": total,
+            "length_km": cable["length_km"],
+            "installed_year": cable["installed_year"],
+            "status": cable["status"],
+            "notes": cable["notes"],
+            "gid": cable["gid"],
+            "panel_code": cable["panel_code"],
+            "section": cable["section"],
+            "total_ports": cable["total_ports"] or 0,
+            "tab_name": cable["tab_name"],
+            "synced_at": cable["synced_at"],
+            "source": "sheet" if cable["gid"] else "manual",
+            "leased": used,
+            "available": total - used,
+            "utilization": round(used / total * 100, 1) if total else 0,
+            "used_combined": combined,
+            "available_combined": total - combined,
+            "utilization_combined": round(combined / total * 100, 1) if total else 0,
+            "sheet_total": sheet_total,
+            "sheet_used": sheet_used,
+            "sheet_used_cores": sheet_used_cores,
+            "sheet_utilization": round(sheet_used_cores / total * 100, 1) if total else 0,
+            "sheet_port_utilization": round(sheet_used / sheet_total * 100, 1) if sheet_total else 0,
+            "sheet_only_cores": sheet_only,
+        })
+    return out
 
 
 def get_cable(conn: sqlite3.Connection, cable_id: int) -> dict | None:
