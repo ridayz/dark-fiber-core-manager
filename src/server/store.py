@@ -405,21 +405,31 @@ def init_db(db_path: str | None = None, seed: bool = True) -> None:
     conn = get_conn(db_path)
     try:
         conn.executescript(SCHEMA)
-        _migrate(conn)
-        if seed and conn.execute("SELECT COUNT(*) AS c FROM tenants").fetchone()["c"] == 0:
+        # One round trip for both the column check and the seed probe: on
+        # Turso a cold start used to pay four separate HTTP calls here.
+        info, counted = fetch_many(
+            conn,
+            [
+                ("PRAGMA table_info(cables)", ()),
+                ("SELECT COUNT(*) AS c FROM tenants", ()),
+            ],
+        )
+        _migrate(conn, {row["name"] for row in info})
+        if seed and counted[0]["c"] == 0:
             seed_demo(conn)
         conn.commit()
     finally:
         conn.close()
 
 
-def _migrate(conn: sqlite3.Connection) -> None:
+def _migrate(conn: sqlite3.Connection, columns: set[str] | None = None) -> None:
     """Add columns that older databases do not have yet.
 
     The ALTER/CREATE statements go out as one batched round trip: on Turso
     every ``execute`` is an HTTP call, and cold starts paid ~8 of them.
     """
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(cables)")}
+    if columns is None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(cables)")}
     pending = [
         (f"ALTER TABLE cables ADD COLUMN {name} {ddl}", ())
         for name, ddl in (
@@ -432,6 +442,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         )
         if name not in columns
     ]
+    if not pending:
+        # SCHEMA already creates idx_cable_plant; nothing to migrate means no
+        # extra HTTP round trip on every cold start.
+        return
     pending.append(
         (
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_cable_plant
