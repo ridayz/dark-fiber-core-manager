@@ -522,14 +522,9 @@
     $("#primary-slot").innerHTML = primary;
     $("#search-wrap").classList.toggle("hidden", !search);
     if (search) {
-      searchEl.placeholder =
-        route.name === "tenants"
-          ? "Cari tenant, PIC, kode, port OTB"
-          : route.name === "leases"
-            ? "Cari lease, tenant, kabel, port OTB"
-            : route.name === "otb"
-              ? "Cari port, tujuan, OTB lintas gedung"
-              : "Cari kabel, tenant, lease, port OTB";
+      searchEl.placeholder = route.name === "otb"
+        ? "Cari port, tujuan, OTB lintas gedung"
+        : "Cari kabel, port OTB";
     }
 
     const navName = route.name === "cables" ? "cables" : route.name === "tenants" ? "tenants" : route.name;
