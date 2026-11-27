@@ -609,6 +609,37 @@
       state.sheetLoadedGid = gid;
     }
     state.sheetTab = gid;
+    await loadOtbDetailCable(route);
+  }
+
+  async function loadOtbDetailCable(route) {
+    const subIndex = route && route.sub !== null && route.sub !== undefined ? Number(route.sub) : null;
+    if (!Number.isInteger(subIndex)) return;
+    const groups = [];
+    const byKey = new Map();
+    for (const entry of state.sheetEntries || []) {
+      const key = `${entry.section || ""}\u0000${entry.panel || ""}`;
+      if (!byKey.has(key)) {
+        const group = { index: groups.length, section: entry.section, panel: entry.panel, rows: [] };
+        byKey.set(key, group);
+        groups.push(group);
+      }
+      byKey.get(key).rows.push(entry);
+    }
+    const detail = groups[subIndex] || null;
+    if (!detail) return;
+    const status = state.sheetStatus;
+    const tabs = (status && status.tabs) || [];
+    const tab = tabs.find((t) => t.gid === state.sheetTab) || null;
+    const summaryRow = otbCableFor(tab ? tab.name : "", detail.panel);
+    if (!summaryRow || !summaryRow.cable_id) return;
+    if (!state.cable || Number(state.cable.id) !== Number(summaryRow.cable_id)) {
+      state.cable = await api(`/cables/${summaryRow.cable_id}`);
+    }
+    state.mapMode = panelLayout(state.cable) ? "panel" : "tube";
+    state.coreFilter = "all";
+    state.selection.clear();
+    buildCoreIndex();
   }
 
   // ---------------------------------------------------------------- views
@@ -870,6 +901,69 @@
     `;
   }
 
+  function cableMapSection(cable, { showTray = true } = {}) {
+    const c = cable;
+    const used = c.used_combined ?? c.leased;
+    const free = c.available_combined ?? c.available;
+    const tenantChips = (c.tenant_totals || [])
+      .map((t) => `<span class="legend-item"><span class="dot" style="color:${t.color}"></span>${esc(t.name)} <span class="count">${num(t.cores)}</span></span>`)
+      .join("");
+    const layout = panelLayout(c);
+    const showPanel = Boolean(layout) && state.mapMode === "panel";
+    if (!c.core_count) {
+      return `
+      <section class="panel map-panel">
+        ${emptyState("Ukuran core belum terdeteksi", "Panel ini hanya menampilkan daftar port dari sheet. Edit kabel untuk mengisi jumlah core agar peta tube tersedia.", "i-layers")}
+      </section>
+      ${showTray ? `<div class="tray" id="tray" hidden></div>` : ""}`;
+    }
+    return `
+      <section class="panel map-panel">
+        <div class="map-toolbar">
+          <div>
+            <h3 class="panel-title">Peta core</h3>
+            <p class="panel-meta">${showPanel ? layout.meta : `${c.tubes.length} tube × 12 core`} · klik core untuk memilih · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
+          </div>
+          <div class="map-tools">
+            ${layout ? `<div class="segmented" role="group" aria-label="Tampilan peta">
+              <button class="seg-btn ${state.mapMode === "panel" ? "active" : ""}" data-action="map-mode" data-mode="panel">Panel</button>
+              <button class="seg-btn ${state.mapMode === "tube" ? "active" : ""}" data-action="map-mode" data-mode="tube">Tube</button>
+            </div>` : ""}
+            <div class="segmented" role="group" aria-label="Filter status core">
+              <button class="seg-btn ${state.coreFilter === "all" ? "active" : ""}" data-action="filter-core" data-filter="all">Semua</button>
+              <button class="seg-btn ${state.coreFilter === "available" ? "active" : ""}" data-action="filter-core" data-filter="available">Tersedia</button>
+              <button class="seg-btn ${state.coreFilter === "used" ? "active" : ""}" data-action="filter-core" data-filter="used">Terpakai</button>
+            </div>
+            <button class="btn btn-ghost btn-sm" data-action="select-available">Pilih tersedia</button>
+            <button class="btn btn-ghost btn-sm" data-action="select-clear">Bersihkan</button>
+          </div>
+        </div>
+        <div class="map-legend">
+          <span class="legend-item"><span class="dot dot-neutral"></span>Tersedia <span class="count">${num(free)}</span></span>
+          <span class="legend-item"><span class="dot sheet-dot-legend"></span>Sheet (Tujuan terisi) <span class="count">${num(c.sheet_used_cores || 0)}</span></span>
+          ${tenantChips}
+        </div>
+        ${showPanel
+          ? panelMap(c)
+          : `<div class="tube-grid">${c.tubes.map((tube) => tubeCard(tube, c)).join("")}</div>`}
+        <div class="map-foot">
+          <span>${showPanel ? layout.foot : "Garis bawah tiap core mengikuti kode warna 12 fiber TIA-598"}</span>
+          <span>${num(used)} terpakai · ${num(free)} tersedia</span>
+        </div>
+      </section>
+      ${showTray ? `<div class="tray" id="tray" hidden>
+        <div class="tray-info">
+          <span class="tray-count" id="tray-count">0</span>
+          <span class="tray-label">core dipilih</span>
+          <span class="tray-ranges" id="tray-ranges"></span>
+        </div>
+        <div class="tray-actions">
+          <button class="btn btn-ghost" data-action="select-clear">Bersihkan</button>
+          <button class="btn btn-primary" data-action="allocate-open" id="tray-allocate">Alokasikan</button>
+        </div>
+      </div>` : ""}`;
+  }
+
   function renderCableView() {
     if (!state.cable) {
       viewEl.innerHTML = loadingState();
@@ -915,46 +1009,7 @@
 
       ${c.sheet_total ? `<div class="sheet-banner">Sheet <strong>${esc(c.tab_name || "")}</strong> · ${num(c.sheet_used)} dari ${num(c.sheet_total)} port Tujuan terisi · <strong>${num(c.sheet_used_cores)} core</strong> teridentifikasi dari nomor port · ${num(c.sheet_only_cores || 0)} core sheet belum ada lease</div>` : ""}
 
-      ${c.core_count ? `
-      <section class="panel map-panel">
-        <div class="map-toolbar">
-          <div>
-            <h3 class="panel-title">Peta core</h3>
-            <p class="panel-meta">${showPanel ? layout.meta : `${c.tubes.length} tube × 12 core`} · klik core untuk memilih · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
-          </div>
-          <div class="map-tools">
-            ${layout ? `<div class="segmented" role="group" aria-label="Tampilan peta">
-              <button class="seg-btn ${state.mapMode === "panel" ? "active" : ""}" data-action="map-mode" data-mode="panel">Panel</button>
-              <button class="seg-btn ${state.mapMode === "tube" ? "active" : ""}" data-action="map-mode" data-mode="tube">Tube</button>
-            </div>` : ""}
-            <div class="segmented" role="group" aria-label="Filter status core">
-              <button class="seg-btn ${state.coreFilter === "all" ? "active" : ""}" data-action="filter-core" data-filter="all">Semua</button>
-              <button class="seg-btn ${state.coreFilter === "available" ? "active" : ""}" data-action="filter-core" data-filter="available">Tersedia</button>
-              <button class="seg-btn ${state.coreFilter === "used" ? "active" : ""}" data-action="filter-core" data-filter="used">Terpakai</button>
-            </div>
-            <button class="btn btn-ghost btn-sm" data-action="select-available">Pilih tersedia</button>
-            <button class="btn btn-ghost btn-sm" data-action="select-clear">Bersihkan</button>
-          </div>
-        </div>
-        <div class="map-legend">
-          <span class="legend-item"><span class="dot dot-neutral"></span>Tersedia <span class="count">${num(free)}</span></span>
-          <span class="legend-item"><span class="dot sheet-dot-legend"></span>Sheet (Tujuan terisi) <span class="count">${num(c.sheet_used_cores || 0)}</span></span>
-          ${tenantChips}
-        </div>
-        ${showPanel
-          ? panelMap(c)
-          : `<div class="tube-grid">${c.tubes.map((tube) => tubeCard(tube, c)).join("")}</div>`}
-        <div class="map-foot">
-          <span>${showPanel ? layout.foot : "Garis bawah tiap core mengikuti kode warna 12 fiber TIA-598"}</span>
-          <span>${num(used)} terpakai · ${num(free)} tersedia</span>
-        </div>
-      </section>
-
-      <div class="tray" id="tray" hidden>` : `
-      <section class="panel map-panel">
-        ${emptyState("Ukuran core belum terdeteksi", "Panel ini hanya menampilkan daftar port dari sheet. Edit kabel untuk mengisi jumlah core agar peta tube tersedia.", "i-layers")}
-      </section>
-      <div class="tray" id="tray" hidden>`}
+      ${cableMapSection(c)}
 
       ${c.entries && c.entries.length ? `
       <section class="panel" style="margin-top:14px">
@@ -978,19 +1033,7 @@
           </table>
         </div>
       </section>` : ""}
-
-      <div class="tray" id="tray" hidden>
-
-        <div class="tray-info">
-          <span class="tray-count" id="tray-count">0</span>
-          <span class="tray-label">core dipilih</span>
-          <span class="tray-ranges" id="tray-ranges"></span>
-        </div>
-        <div class="tray-actions">
-          <button class="btn btn-ghost" data-action="select-clear">Bersihkan</button>
-          <button class="btn btn-primary" data-action="allocate-open" id="tray-allocate">Alokasikan</button>
-        </div>
-      </div>`;
+    `;
   }
 
   // Tata letak fisik panel OTB:
@@ -2057,6 +2100,7 @@
       const usage = panelUsage(detail);
       const rows = q ? detail.rows.filter((row) => otbRowMatches(row, q)) : detail.rows;
       const cable = otbCableFor(tab ? tab.name : "", detail.panel);
+      const mapCable = cable && state.cable && Number(state.cable.id) === Number(cable.cable_id) ? state.cable : null;
       main = `
         <section class="otb-main">
           <div class="card otb-head">
@@ -2072,6 +2116,8 @@
           </div>
 
           ${errorCard}
+
+          ${mapCable ? cableMapSection(mapCable, { showTray: false }) : ""}
 
           ${
             detail.rows.length
