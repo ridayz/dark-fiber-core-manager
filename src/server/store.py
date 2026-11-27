@@ -415,7 +415,7 @@ def init_db(db_path: str | None = None, seed: bool = True) -> None:
             ],
         )
         _migrate(conn, {row["name"] for row in info})
-        if seed and counted[0]["c"] == 0:
+        if seed and list(counted)[0]["c"] == 0:
             seed_demo(conn)
         conn.commit()
     finally:
