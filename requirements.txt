@@ -1,1 +1,1 @@
-libsql-client>=0.3.1
+# No external dependencies required; Turso is accessed via stdlib urllib.

@@ -1,8 +1,11 @@
-"""DB adapter: Turso/libSQL when env vars set, else local sqlite3."""
+"""DB adapter: Turso/libSQL over HTTP when env vars set, else local sqlite3."""
 from __future__ import annotations
 
+import base64
+import json
 import os
 import sqlite3
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,22 +33,88 @@ class _CursorResult:
         return list(self._rows)
 
 
+def _turso_arg(v):
+    if v is None:
+        return {"type": "null"}
+    if isinstance(v, bool):
+        return {"type": "integer", "value": "1" if v else "0"}
+    if isinstance(v, int):
+        return {"type": "integer", "value": str(v)}
+    if isinstance(v, float):
+        return {"type": "float", "value": v}
+    if isinstance(v, (bytes, bytearray)):
+        return {"type": "blob", "base64": base64.b64encode(bytes(v)).decode()}
+    return {"type": "text", "value": str(v)}
+
+
+def _turso_val(v):
+    if v is None:
+        return None
+    t = v.get("type")
+    if t == "null":
+        return None
+    if t == "integer":
+        try:
+            return int(v.get("value"))
+        except Exception:
+            return v.get("value")
+    if t == "float":
+        try:
+            return float(v.get("value"))
+        except Exception:
+            return v.get("value")
+    if t == "text":
+        return v.get("value")
+    if t == "blob":
+        return base64.b64decode(v.get("base64", ""))
+    return v.get("value")
+
+
 class TursoConn:
     def __init__(self, url: str, token: str):
-        import libsql_client
+        base = url.strip()
+        if base.startswith("libsql://"):
+            base = "https://" + base[len("libsql://"):]
+        if base.startswith("ws://"):
+            base = "http://" + base[len("ws://"):]
+        if base.startswith("wss://"):
+            base = "https://" + base[len("wss://"):]
+        self._endpoint = base.rstrip("/") + "/v2/pipeline"
+        self._token = token
 
-        self._client = libsql_client.create_client_sync(url, auth_token=token)
+    def _post(self, requests):
+        body = json.dumps({"requests": list(requests) + [{"type": "close"}]}).encode("utf-8")
+        req = urllib.request.Request(
+            self._endpoint,
+            data=body,
+            headers={"Authorization": f"Bearer {self._token}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return json.loads(resp.read().decode("utf-8"))
 
     def execute(self, sql: str, params=()):
-        rs = self._client.execute(sql, list(params))
+        stmt = {"sql": sql}
+        p = list(params)
+        if p:
+            stmt["args"] = [_turso_arg(v) for v in p]
+        data = self._post([{"type": "execute", "stmt": stmt}])
+        results = data.get("results", [])
+        if not results:
+            return _CursorResult()
+        res = results[0]
+        if res.get("type") == "error":
+            err = res.get("error", {})
+            raise RuntimeError(err.get("message") or str(err))
+        r = res.get("response", {}).get("result", {})
+        cols = [c.get("name") for c in r.get("cols", [])]
         rows = []
-        cols = list(rs.columns or [])
-        for r in rs.rows:
-            row = _Row()
+        for row in r.get("rows", []):
+            obj = _Row()
             for i, col in enumerate(cols):
-                row[col] = r[i]
-            rows.append(row)
-        return _CursorResult(rows=rows, lastrowid=getattr(rs, "last_insert_rowid", None))
+                obj[col] = _turso_val(row[i])
+            rows.append(obj)
+        return _CursorResult(rows=rows, lastrowid=r.get("last_insert_rowid"))
 
     def executemany(self, sql: str, seq):
         last = None
@@ -54,20 +123,22 @@ class TursoConn:
         return last or _CursorResult()
 
     def executescript(self, sql: str):
-        for stmt in sql.split(";"):
-            s = stmt.strip()
-            if s:
-                self.execute(s)
+        stmts = [s.strip() for s in sql.split(";") if s.strip()]
+        if not stmts:
+            return _CursorResult()
+        reqs = [{"type": "execute", "stmt": {"sql": s}} for s in stmts]
+        data = self._post(reqs)
+        for res in data.get("results", []):
+            if res.get("type") == "error":
+                err = res.get("error", {})
+                raise RuntimeError(err.get("message") or str(err))
         return _CursorResult()
 
     def commit(self):
         return None
 
     def close(self):
-        try:
-            self._client.close()
-        except Exception:
-            pass
+        return None
 
 
 def using_turso() -> bool:
