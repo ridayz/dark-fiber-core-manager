@@ -22,7 +22,7 @@ Dashboard ini adalah versi baru dari `backbone-core-dashboard`. Versi lama tidak
 - Peta core per tube (12 core per tube) dengan kode warna fiber TIA-598; halaman detail menampilkan tabel port OTB dari sheet di bawah peta.
 - **Peta panel LC untuk kabel 144 dan 288 core** — mode `Panel` mengikuti fisik perangkat:
   - **144 core**: fisik OTB 192 — 24 kolom × 4 core × 2 baris (atas 1-96, bawah 97-192, urutan ke bawah per kolom). Nama kabel tetap OTB 144; slot 145-192 ditampilkan void.
-  - **288 core**: fisik OTB 288 — 12 kolom × 24 core turun (1-24 di kolom pertama, 25-48 kolom kedua, dst sampai 288), nomor dikelompokkan 4 core per blok: 1-4, 5-8, 9-12, 13-16, 17-20, 21-24.
+  - **288 core**: fisik OTB 288 — 12 kolom ke samping, tiap kolom 24 core (4 core ke samping × 6 baris turun). Nomor dibaca 4 ke samping lalu turun: 1-4, 5-8, … 21-24 di kolom pertama, lalu 25-48 di kolom kedua, dst sampai 288. Ukuran kotak core sama dengan panel 144.
   - Ukuran lain tetap memakai tampilan tube 12 core.
 - Pilih beberapa core (klik, shift-klik untuk rentang, atau "Pilih tersedia") lalu alokasikan sekaligus ke tenant.
 - Filter peta berdasarkan status core (semua / tersedia / terpakai).

@@ -1000,8 +1000,8 @@
 
   // Tata letak fisik panel OTB:
   // 144 core -> panel LC fisik OTB 192: 24 kolom x 4 core x 2 baris (1-96, 97-192).
-  // 288 core -> panel LC fisik OTB 288: 24 kolom x 12 core, nomor turun per kolom.
-  // Nomor dibaca turun per kolom, dikelompokkan 4 core: 1-4, 5-8, 9-12, lalu kolom berikutnya 13-24, dst.
+  // 288 core -> panel LC fisik OTB 288: 12 kolom ke samping, tiap kolom 24 core.
+  // Nomor dibaca 4 core ke samping lalu turun: 1-4, 5-8, ... 21-24, lanjut kolom berikutnya 25-48, dst.
   function panelLayout(cable) {
     if (cable.core_count === 144) {
       return {
@@ -1014,11 +1014,12 @@
     }
     if (cable.core_count === 288) {
       return {
-        cols: 12,
-        rows: 24,
-        bands: 1,
-        meta: "Panel OTB 288 · 12 kolom × 24 core turun",
-        foot: "Panel LC: 24 core per kolom turun, 12 kolom (1-288), grup 4 core: 1-4, 5-8, 9-12, 13-16, 17-20, 21-24",
+        order: "grid",
+        groups: 12,
+        perRow: 4,
+        rows: 6,
+        meta: "Panel OTB 288 · 12 kolom × 24 core (4 core per baris)",
+        foot: "Panel LC: tiap kolom 24 core dibaca 4 ke samping lalu turun (1-4, 5-8, ... 21-24), 12 kolom (1-288)",
       };
     }
     return null;
@@ -1027,8 +1028,34 @@
   function panelMap(cable) {
     const layout = panelLayout(cable);
     if (!layout) return "";
+    const cellAt = (no) => {
+      const core = state.coreIndex.get(no);
+      return core
+        ? coreCell(core, cable)
+        : `<span class="core core-void" title="Core ${no}" aria-hidden="true">${no}</span>`;
+    };
+
+    // 288 core: 12 kolom ke samping, tiap kolom 4 core ke samping x 6 baris = 24 core.
+    if (layout.order === "grid") {
+      const blocks = [];
+      for (let g = 0; g < layout.groups; g += 1) {
+        const base = g * layout.perRow * layout.rows;
+        const cells = [];
+        for (let row = 0; row < layout.rows; row += 1) {
+          for (let col = 0; col < layout.perRow; col += 1) {
+            cells.push(cellAt(base + row * layout.perRow + col + 1));
+          }
+        }
+        const first = base + 1;
+        const last = base + layout.perRow * layout.rows;
+        blocks.push(
+          `<div class="panel-col-288" title="Kolom ${g + 1} · core ${first}–${last}">${cells.join("")}</div>`,
+        );
+      }
+      return `<div class="panel-map-wrap panel-map-wrap-scroll"><div class="panel-map panel-map-288">${blocks.join("")}</div></div>`;
+    }
+
     const { cols, rows, bands } = layout;
-    const groupSize = 4;
     const totalSlots = cols * rows * bands;
     const bandHtml = [];
     for (let band = 0; band < bands; band += 1) {
@@ -1039,26 +1066,12 @@
         for (let row = 0; row < rows; row += 1) {
           const no = base + row + 1;
           if (no > totalSlots) break;
-          const core = state.coreIndex.get(no);
-          cells.push(
-            core
-              ? coreCell(core, cable)
-              : `<span class="core core-void" title="Core ${no}" aria-hidden="true">${no}</span>`,
-          );
-        }
-        // 144 core: satu kolom = 4 core (sama seperti sebelumnya, tanpa wrapper).
-        // 288 core: 24 core per kolom, dipecah jadi blok 4 core.
-        let inner = cells.join("");
-        if (rows > groupSize) {
-          inner = "";
-          for (let start = 0; start < cells.length; start += groupSize) {
-            inner += `<div class="panel-group">${cells.slice(start, start + groupSize).join("")}</div>`;
-          }
+          cells.push(cellAt(no));
         }
         const first = base + 1;
         const last = Math.min(base + rows, totalSlots);
         columns.push(
-          `<div class="panel-col" title="Kolom ${band * cols + col + 1} · core ${first}–${last}">${inner}</div>`,
+          `<div class="panel-col" title="Kolom ${band * cols + col + 1} · core ${first}–${last}">${cells.join("")}</div>`,
         );
       }
       const bandFirst = band * cols * rows + 1;
