@@ -8,6 +8,150 @@
   const searchEl = $("#search");
   const modalRoot = $("#modal-root");
 
+  // ---------------------------------------------------------------- load UI
+  // Progres nyata: persentase dari byte respons (Content-Length). Kalau tidak
+  // ada header, bar berjalan ke 60% lalu menunggu sampai respons selesai.
+  const LOAD = { soft: 2000, cacheMs: 60000, inflight: new Map() };
+
+  // ---- micro-cache + single-flight: nav bolak-balik nggak request ulang.
+  const cache = new Map(); // path -> { at, value }
+
+  function cacheGet(path, ttl = LOAD.cacheMs) {
+    const e = cache.get(path);
+    if (!e) return undefined;
+    if (performance.now() - e.at > ttl) { cache.delete(path); return undefined; }
+    return e.value;
+  }
+
+  function cacheSet(path, value) { cache.set(path, { at: performance.now(), value }); }
+
+  async function apiCached(path, options) {
+    const opts = options || {};
+    if (opts.method && opts.method !== "GET") return api(path, opts); // write: selalu fresh
+    const hit = cacheGet(path);
+    if (hit !== undefined) return hit;
+    if (LOAD.inflight.has(path)) return LOAD.inflight.get(path);
+    const p = api(path, opts)
+      .then((v) => { cacheSet(path, v); return v; })
+      .finally(() => LOAD.inflight.delete(path));
+    LOAD.inflight.set(path, p);
+    return p;
+  }
+
+  function invalidate(prefix) {
+    if (!prefix) { cache.clear(); return; }
+    for (const k of cache.keys()) if (k === prefix || k.startsWith(prefix)) cache.delete(k);
+  }
+
+  // ---- overlay + progress ---------------------------------------------------
+  const $load = () => document.getElementById("load-overlay");
+  const $bar = () => document.getElementById("load-bar");
+  const $pct = () => document.getElementById("load-pct");
+  const $label = () => document.getElementById("load-label");
+  let _loadTimer = null;
+  let _active = 0;
+  let _pending = 0;
+
+  function paintLoad(pct, label) {
+    const box = $load();
+    if (!box) return;
+    box.hidden = false;
+    const v = Math.max(0, Math.min(100, pct));
+    const bar = $bar(); if (bar) bar.style.width = `${v}%`;
+    box.setAttribute("aria-valuenow", String(Math.round(v)));
+    const p = $pct(); if (p) p.textContent = `${Math.round(v)}%`;
+    const l = $label(); if (l && label) l.textContent = label;
+  }
+
+  function startLoad(label) {
+    _active += 1;
+    _pending += 1;
+    if (_loadTimer) clearTimeout(_loadTimer);
+    if (_pending === 1) paintLoad(4, label); // langsung kelihatan, tanpa delay
+  }
+
+  function progressLoad(pct, label) {
+    if (_active > 0) paintLoad(pct, label);
+  }
+
+  function endLoad() {
+    _active = Math.max(0, _active - 1);
+    if (_active > 0) return;
+    paintLoad(100, "Selesai");
+    if (_loadTimer) clearTimeout(_loadTimer);
+    _loadTimer = setTimeout(() => {
+      const box = $load(); if (box) box.hidden = true;
+      const bar = $bar(); if (bar) bar.style.width = "0%";
+      _pending = 0;
+    }, 200);
+  }
+
+  function loadingState(label = "Memuat data…") {
+    return `<div class="loading"><div class="spin" aria-hidden="true"></div><p>${esc(label)}</p></div>`;
+  }
+
+  // ---- fetch + progress -----------------------------------------------------
+  async function api(path, options = {}) {
+    const opts = { ...options };
+    const isWrite = opts.method && opts.method !== "GET";
+    const silent = !!opts.silent;
+    const fresh = !!opts.fresh;
+    if ("silent" in opts) delete opts.silent;
+    if ("fresh" in opts) delete opts.fresh;
+    const shortPath = path.split("?")[0].split("/").pop() || path;
+    if (!isWrite) {
+      const hit = cacheGet(path);
+      if (hit !== undefined && !fresh) return hit;
+    }
+    if (!silent) startLoad(isWrite ? `Menyimpan ${shortPath}…` : `Memuat ${shortPath}…`);
+    let slow = null;
+    try {
+      const res = await fetch(`/api${path}`, {
+        ...opts,
+        headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      });
+      if (!silent && _active > 0) {
+        slow = setTimeout(() => progressLoad(60, "Server sedang merespons…"), LOAD.soft);
+      }
+      const isJson = (res.headers.get("content-type") || "").includes("application/json");
+      const total = Number(res.headers.get("content-length")) || 0;
+      let text = "";
+      if (res.body && res.body.getReader && total > 0) {
+        const reader = res.body.getReader();
+        const chunks = [];
+        let received = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.byteLength;
+          if (!silent) progressLoad(Math.min(99, (received / total) * 100), `Memuat ${shortPath}…`);
+        }
+        text = new TextDecoder().decode(concat(chunks, received));
+      } else {
+        text = await res.text();
+      }
+      let data = {};
+      if (isJson || text.trimStart().startsWith("{") || text.trimStart().startsWith("[")) {
+        try { data = JSON.parse(text); } catch { data = {}; }
+      } else { data = { raw: text }; }
+      if (!res.ok) throw new Error(data.error || `Permintaan gagal (${res.status})`);
+      if (isWrite) invalidate();
+      else cacheSet(path, data);
+      return data;
+    } finally {
+      if (slow) clearTimeout(slow);
+      if (!silent) endLoad();
+    }
+  }
+
+  function concat(chunks, n) {
+    const out = new Uint8Array(n);
+    let o = 0;
+    for (const c of chunks) { out.set(c, o); o += c.length; }
+    return out;
+  }
+
   const FALLBACK_PURPOSES = [
     "Dark Fiber Lease",
     "Backbone Transmisi",
@@ -416,10 +560,10 @@
   // ---------------------------------------------------------------- data
   async function refreshBasics() {
     const [summary, tenants, leases, sheetStatus] = await Promise.all([
-      api("/summary"),
-      api("/tenants"),
-      api("/leases"),
-      api("/sheet/status"),
+      apiCached("/summary"),
+      apiCached("/tenants"),
+      apiCached("/leases"),
+      apiCached("/sheet/status"),
     ]);
     state.summary = summary;
     state.cables = summary.cables;
@@ -563,11 +707,11 @@
 
     try {
       if (route.name === "cables" && route.id) {
-        state.cable = await api(`/cables/${route.id}`);
+        state.cable = await apiCached(`/cables/${route.id}`);
         state.mapMode = panelLayout(state.cable) ? "panel" : "tube";
         buildCoreIndex();
       } else if (route.name === "tenants" && route.id) {
-        state.tenant = await api(`/tenants/${route.id}`);
+        state.tenant = await apiCached(`/tenants/${route.id}`);
       } else if (route.name === "otb") {
         await loadSheet(route);
       }
@@ -594,7 +738,7 @@
   }
 
   async function loadSheet(route, { force = false } = {}) {
-    state.sheetStatus = await api("/sheet/status");
+    state.sheetStatus = await apiCached("/sheet/status");
     const tabs = state.sheetStatus.tabs || [];
     let gid = route.id;
     if (!tabs.some((tab) => tab.gid === gid)) gid = state.sheetTab || (tabs[0] && tabs[0].gid) || "";
@@ -604,7 +748,7 @@
       return;
     }
     if (force || gid !== state.sheetLoadedGid) {
-      const data = await api(`/sheet/entries?gid=${encodeURIComponent(gid)}`);
+      const data = await api(`/sheet/entries?gid=${encodeURIComponent(gid)}`, force ? { fresh: true } : {});
       state.sheetEntries = data.entries || [];
       state.sheetLoadedGid = gid;
     }
@@ -634,7 +778,7 @@
     const summaryRow = otbCableFor(tab ? tab.name : "", detail.panel);
     if (!summaryRow || !summaryRow.cable_id) return;
     if (!state.cable || Number(state.cable.id) !== Number(summaryRow.cable_id)) {
-      state.cable = await api(`/cables/${summaryRow.cable_id}`);
+      state.cable = await apiCached(`/cables/${summaryRow.cable_id}`);
     }
     state.mapMode = panelLayout(state.cable) ? "panel" : "tube";
     state.coreFilter = "all";
@@ -2337,9 +2481,9 @@
     if (getRoute().name !== "otb" || document.hidden) return;
     if (document.activeElement && document.activeElement.id === "sheet-q") return;
     try {
-      state.sheetStatus = await api("/sheet/status");
+      state.sheetStatus = await api("/sheet/status", { fresh: true, silent: true });
       if (!state.sheetQuery && state.sheetTab) {
-        const data = await api(`/sheet/entries?gid=${encodeURIComponent(state.sheetTab)}`);
+        const data = await api(`/sheet/entries?gid=${encodeURIComponent(state.sheetTab)}`, { fresh: true, silent: true });
         state.sheetEntries = data.entries || [];
         state.sheetLoadedGid = state.sheetTab;
       }
@@ -2354,7 +2498,7 @@
   async function boot() {
     viewEl.innerHTML = loadingState();
     try {
-      state.meta = await api("/meta");
+      state.meta = await apiCached("/meta");
       await refreshBasics();
       if (!location.hash) history.replaceState(null, "", "#/overview");
       await renderApp();
