@@ -92,6 +92,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .sidebar .nav-item.active .ico { color: #fff; }
 .sidebar .nav-item.active::before { background: #fff; }
 .sidebar .nav-count { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.18); color: rgba(255,255,255,0.9); }
+.sidebar .nav-item.active .nav-count { background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.3); color: #fff; }
 .sidebar .meter { background: rgba(255,255,255,0.18); }
 .sidebar .meter > span, .sidebar .meter-fill { background: #fff; }
 .brand {
