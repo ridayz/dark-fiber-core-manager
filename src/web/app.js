@@ -569,7 +569,7 @@
     try {
       if (route.name === "cables" && route.id) {
         state.cable = await api(`/cables/${route.id}`);
-        state.mapMode = state.cable.core_count === 144 ? "panel" : "tube";
+        state.mapMode = panelLayout(state.cable) ? "panel" : "tube";
         buildCoreIndex();
       } else if (route.name === "tenants" && route.id) {
         state.tenant = await api(`/tenants/${route.id}`);
@@ -886,6 +886,8 @@
     const tenantChips = c.tenant_totals
       .map((t) => `<span class="legend-item"><span class="dot" style="color:${t.color}"></span>${esc(t.name)} <span class="count">${num(t.cores)}</span></span>`)
       .join("");
+    const layout = panelLayout(c);
+    const showPanel = Boolean(layout) && state.mapMode === "panel";
 
     viewEl.innerHTML = `
       <a class="back" href="#/cables"><svg class="ico"><use href="#i-back"/></svg>Kabel backbone</a>
@@ -923,10 +925,10 @@
         <div class="map-toolbar">
           <div>
             <h3 class="panel-title">Peta core</h3>
-            <p class="panel-meta">${c.core_count === 144 && state.mapMode === "panel" ? `Panel OTB 144 (fisik 192) · 24 kolom × 2 baris` : `${c.tubes.length} tube × 12 core`} · klik core untuk memilih · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
+            <p class="panel-meta">${showPanel ? layout.meta : `${c.tubes.length} tube × 12 core`} · klik core untuk memilih · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
           </div>
           <div class="map-tools">
-            ${c.core_count === 144 ? `<div class="segmented" role="group" aria-label="Tampilan peta">
+            ${layout ? `<div class="segmented" role="group" aria-label="Tampilan peta">
               <button class="seg-btn ${state.mapMode === "panel" ? "active" : ""}" data-action="map-mode" data-mode="panel">Panel</button>
               <button class="seg-btn ${state.mapMode === "tube" ? "active" : ""}" data-action="map-mode" data-mode="tube">Tube</button>
             </div>` : ""}
@@ -944,11 +946,11 @@
           <span class="legend-item"><span class="dot sheet-dot-legend"></span>Sheet (Tujuan terisi) <span class="count">${num(c.sheet_used_cores || 0)}</span></span>
           ${tenantChips}
         </div>
-        ${c.core_count === 144 && state.mapMode === "panel"
+        ${showPanel
           ? panelMap(c)
           : `<div class="tube-grid">${c.tubes.map((tube) => tubeCard(tube, c)).join("")}</div>`}
         <div class="map-foot">
-          <span>${c.core_count === 144 && state.mapMode === "panel" ? "Panel LC: 4 core per kolom, 24 kolom per baris, 2 baris (1-96, 97-192)" : "Garis bawah tiap core mengikuti kode warna 12 fiber TIA-598"}</span>
+          <span>${showPanel ? layout.foot : "Garis bawah tiap core mengikuti kode warna 12 fiber TIA-598"}</span>
           <span>${num(used)} terpakai · ${num(free)} tersedia</span>
         </div>
       </section>
@@ -996,47 +998,71 @@
       </div>`;
   }
 
-  function panelColumns(cable) {
-    if (cable.core_count === 144) return 24;
-    return Math.ceil((cable.core_count || 0) / 4);
+  // Tata letak fisik panel OTB:
+  // 144 core -> panel LC fisik OTB 192: 24 kolom x 4 core x 2 baris (1-96, 97-192).
+  // 288 core -> panel LC fisik OTB 288: 24 kolom x 12 core, nomor turun per kolom.
+  // Nomor dibaca turun per kolom, dikelompokkan 4 core: 1-4, 5-8, 9-12, lalu kolom berikutnya 13-24, dst.
+  function panelLayout(cable) {
+    if (cable.core_count === 144) {
+      return {
+        cols: 24,
+        rows: 4,
+        bands: 2,
+        meta: "Panel OTB 144 (fisik 192) · 24 kolom × 2 baris",
+        foot: "Panel LC: 4 core per kolom, 24 kolom per baris, 2 baris (1-96, 97-192)",
+      };
+    }
+    if (cable.core_count === 288) {
+      return {
+        cols: 12,
+        rows: 24,
+        bands: 1,
+        meta: "Panel OTB 288 · 12 kolom × 24 core turun",
+        foot: "Panel LC: 24 core per kolom turun, 12 kolom (1-288), grup 4 core: 1-4, 5-8, 9-12, 13-16, 17-20, 21-24",
+      };
+    }
+    return null;
   }
 
-  // Panel LC 144: fisik OTB 192 (24 kolom x 4 core x 2 baris = 192).
-  // Urutan: 1-4 turun, 5-8 turun, ... 93-96 (baris atas 24 kolom), lalu 97-100 ... 189-192 (baris bawah).
   function panelMap(cable) {
-    const rows = 4;
-    const colsPerBand = cable.core_count === 144 ? 24 : panelColumns(cable);
-    const bandCount = cable.core_count === 144 ? 2 : 1;
-    const totalSlots = colsPerBand * rows * bandCount;
-    const bands = [];
-    for (let band = 0; band < bandCount; band += 1) {
+    const layout = panelLayout(cable);
+    if (!layout) return "";
+    const { cols, rows, bands } = layout;
+    const groupSize = 4;
+    const totalSlots = cols * rows * bands;
+    const bandHtml = [];
+    for (let band = 0; band < bands; band += 1) {
       const columns = [];
-      for (let col = 0; col < colsPerBand; col += 1) {
-        const cells = [];
-        const base = band * colsPerBand * rows + col * rows;
-        for (let row = 0; row < rows; row += 1) {
-          const no = base + row + 1;
-          if (no > totalSlots) break;
-          const core = state.coreIndex.get(no);
-          cells.push(
-            core
-              ? coreCell(core, cable)
-              : `<span class="core core-void" title="Core ${no}" aria-hidden="true">${no}</span>`,
-          );
+      for (let col = 0; col < cols; col += 1) {
+        const base = band * cols * rows + col * rows;
+        const groups = [];
+        for (let start = 0; start < rows; start += groupSize) {
+          const cells = [];
+          for (let row = start; row < Math.min(start + groupSize, rows); row += 1) {
+            const no = base + row + 1;
+            if (no > totalSlots) break;
+            const core = state.coreIndex.get(no);
+            cells.push(
+              core
+                ? coreCell(core, cable)
+                : `<span class="core core-void" title="Core ${no}" aria-hidden="true">${no}</span>`,
+            );
+          }
+          if (cells.length) groups.push(`<div class="panel-group">${cells.join("")}</div>`);
         }
         const first = base + 1;
-        const last = base + rows;
+        const last = Math.min(base + rows, totalSlots);
         columns.push(
-          `<div class="panel-col" title="Kolom ${band * colsPerBand + col + 1} · core ${first}–${last}">${cells.join("")}</div>`,
+          `<div class="panel-col" title="Kolom ${band * cols + col + 1} · core ${first}–${last}">${groups.join("")}</div>`,
         );
       }
-      const bandFirst = band * colsPerBand * rows + 1;
-      const bandLast = bandFirst + colsPerBand * rows - 1;
-      const label = bandCount > 1 ? `<span class="band-label">core ${bandFirst}–${bandLast}</span>` : "";
-      bands.push(`<div class="panel-band">${label}<div class="band-cols" style="grid-template-columns:repeat(${colsPerBand},minmax(0,1fr))">${columns.join("")}</div></div>`);
+      const bandFirst = band * cols * rows + 1;
+      const bandLast = bandFirst + cols * rows - 1;
+      const label = bands > 1 ? `<span class="band-label">core ${bandFirst}–${bandLast}</span>` : "";
+      bandHtml.push(`<div class="panel-band">${label}<div class="band-cols" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${columns.join("")}</div></div>`);
     }
-    const className = bandCount > 1 ? "panel-map panel-map-bands" : "panel-map";
-    return `<div class="panel-map-wrap"><div class="${className}">${bands.join("")}</div></div>`;
+    const className = bands > 1 ? "panel-map panel-map-bands" : `panel-map panel-map-${cable.core_count}`;
+    return `<div class="panel-map-wrap"><div class="${className}">${bandHtml.join("")}</div></div>`;
   }
 
   function tubeCard(tube, cable) {
