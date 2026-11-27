@@ -1035,25 +1035,30 @@
       const columns = [];
       for (let col = 0; col < cols; col += 1) {
         const base = band * cols * rows + col * rows;
-        const groups = [];
-        for (let start = 0; start < rows; start += groupSize) {
-          const cells = [];
-          for (let row = start; row < Math.min(start + groupSize, rows); row += 1) {
-            const no = base + row + 1;
-            if (no > totalSlots) break;
-            const core = state.coreIndex.get(no);
-            cells.push(
-              core
-                ? coreCell(core, cable)
-                : `<span class="core core-void" title="Core ${no}" aria-hidden="true">${no}</span>`,
-            );
+        const cells = [];
+        for (let row = 0; row < rows; row += 1) {
+          const no = base + row + 1;
+          if (no > totalSlots) break;
+          const core = state.coreIndex.get(no);
+          cells.push(
+            core
+              ? coreCell(core, cable)
+              : `<span class="core core-void" title="Core ${no}" aria-hidden="true">${no}</span>`,
+          );
+        }
+        // 144 core: satu kolom = 4 core (sama seperti sebelumnya, tanpa wrapper).
+        // 288 core: 24 core per kolom, dipecah jadi blok 4 core.
+        let inner = cells.join("");
+        if (rows > groupSize) {
+          inner = "";
+          for (let start = 0; start < cells.length; start += groupSize) {
+            inner += `<div class="panel-group">${cells.slice(start, start + groupSize).join("")}</div>`;
           }
-          if (cells.length) groups.push(`<div class="panel-group">${cells.join("")}</div>`);
         }
         const first = base + 1;
         const last = Math.min(base + rows, totalSlots);
         columns.push(
-          `<div class="panel-col" title="Kolom ${band * cols + col + 1} · core ${first}–${last}">${groups.join("")}</div>`,
+          `<div class="panel-col" title="Kolom ${band * cols + col + 1} · core ${first}–${last}">${inner}</div>`,
         );
       }
       const bandFirst = band * cols * rows + 1;

@@ -519,10 +519,11 @@ ul { margin: 0; padding: 0; list-style: none; }
 .panel-band { width: 100%; display: flex; align-items: flex-start; gap: 8px; }
 .band-label { width: 72px; flex: none; font-family: var(--mono); font-size: 9.5px; color: var(--mut); padding-top: 5px; }
 .band-cols { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; width: 100%; flex: 1; min-width: 0; }
-.panel-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.panel-group { display: grid; grid-template-rows: repeat(4, 22px); gap: 2px; min-width: 0; }
+.panel-col { display: grid; grid-template-rows: repeat(4, 22px); gap: 2px; min-width: 0; }
 .panel-col .core { width: 100%; min-width: 0; height: 22px; font-size: 8px; border-radius: 3px; }
-.panel-map-288 .panel-group { padding: 2px; background: var(--panel-2); border-radius: 5px; }
+/* 288 core saja: kolom 24 core, dipecah blok 4 core */
+.panel-map-288 .panel-col { display: flex; flex-direction: column; gap: 6px; }
+.panel-map-288 .panel-group { display: grid; grid-template-rows: repeat(4, 22px); gap: 2px; min-width: 0; padding: 2px; background: var(--panel-2); border-radius: 5px; }
 .panel-map-288 .panel-col .core { font-size: 9px; }
 .panel-col .core-void { visibility: visible; opacity: 0.28; background: transparent; border-style: dashed; color: var(--mut); pointer-events: none; }
 .core {
