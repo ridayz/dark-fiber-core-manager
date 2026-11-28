@@ -2620,7 +2620,7 @@
       // Prefetch tab OTB pertama saat idle supaya klik pertama terasa instan.
       const prefetchOtb = () => {
         const gid = state.sheetStatus?.tabs?.[0]?.gid;
-        if (gid) api(`/sheet/entries?gid=${encodeURIComponent(gid)}`, { silent: true }).catch(() => {});
+        if (gid) apiCached(`/sheet/entries?gid=${encodeURIComponent(gid)}`, { silent: true }).catch(() => {});
       };
       if ("requestIdleCallback" in window) requestIdleCallback(prefetchOtb, { timeout: 2000 });
       else setTimeout(prefetchOtb, 1200);
