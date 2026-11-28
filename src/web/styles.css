@@ -766,10 +766,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .route-progress {
   position: fixed;
   inset: 0 0 auto 0;
-  height: 3px;
+  height: 4px;
   z-index: 200;
   pointer-events: none;
   opacity: 0;
+  overflow: hidden;
   transition: opacity 0.12s var(--ease);
 }
 .route-progress.on { opacity: 1; }
@@ -777,6 +778,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   display: block;
   height: 100%;
   width: 0;
+  border-radius: 0 999px 999px 0;
   background: linear-gradient(90deg, #0b63c4 0%, #3ea0ff 45%, #0b63c4 100%);
   background-size: 200% 100%;
   box-shadow: 0 0 10px rgba(62, 160, 255, 0.55);
@@ -786,6 +788,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .route-progress.on > span { width: 88%; }
 .route-progress.on.done > span {
   width: 100%;
+  border-radius: 0;
   transition: width 0.18s ease-out;
   animation: none;
 }
