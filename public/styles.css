@@ -771,30 +771,31 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   pointer-events: none;
   opacity: 0;
   overflow: hidden;
+  background: var(--panel-3);
   transition: opacity 0.12s var(--ease);
 }
 .route-progress.on { opacity: 1; }
 .route-progress > span {
   display: block;
   height: 100%;
-  width: 0;
-  border-radius: 0 999px 999px 0;
-  background: linear-gradient(90deg, #0b63c4 0%, #3ea0ff 45%, #0b63c4 100%);
-  background-size: 200% 100%;
-  box-shadow: 0 0 10px rgba(62, 160, 255, 0.55);
-  transition: width 8s cubic-bezier(0.1, 0.4, 0.2, 1);
-  animation: bar-flow 1.2s linear infinite;
+  width: 34%;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: none;
+  transform: translateX(-120%);
+  animation: meter-slide 1.1s ease-in-out infinite;
 }
-.route-progress.on > span { width: 88%; }
 .route-progress.on.done > span {
   width: 100%;
+  transform: translateX(0);
   border-radius: 0;
-  transition: width 0.18s ease-out;
   animation: none;
+  transition: width 0.18s ease-out, transform 0.18s ease-out;
 }
-@keyframes bar-flow {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+@keyframes meter-slide {
+  0% { transform: translateX(-120%); }
+  60% { transform: translateX(220%); }
+  100% { transform: translateX(220%); }
 }
 
 .skeleton { display: grid; gap: 16px; padding: 4px 0 24px; }
