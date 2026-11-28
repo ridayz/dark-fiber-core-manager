@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<div id="route-progress" class="route-progress" aria-hidden="true"><span></span></div>
 <svg class="sprite" aria-hidden="true">
   <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
   <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
@@ -27,6 +28,7 @@
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
   <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></symbol>
   <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1.3" fill="currentColor" stroke="none"/></symbol>
 </svg>
 
 <div class="app">
@@ -77,12 +79,31 @@
           <div id="search-pop" class="search-pop" hidden></div>
         </div>
         <span id="primary-slot"></span>
+        <button id="logout" class="btn btn-ghost btn-logout" type="button" hidden>
+          <svg class="ico"><use href="#i-lock"/></svg><span>Keluar</span>
+        </button>
       </div>
     </header>
     <div id="view" class="view" aria-live="polite"></div>
   </main>
 </div>
 
+<div id="auth-gate" class="auth-gate" hidden>
+  <form id="auth-form" class="auth-card" autocomplete="on">
+    <span class="auth-logo" aria-hidden="true">
+      <svg viewBox="0 0 32 32"><g fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="16" cy="16" r="10.5"/><circle cx="16" cy="16" r="4"/><path d="M16 3.2v3.8M16 25v3.8M3.2 16H7M25 16h3.8"/></g><circle cx="16" cy="16" r="1.7" fill="currentColor"/></svg>
+    </span>
+    <h2>Akses terbatas</h2>
+    <p class="auth-sub">Masukkan password workspace untuk membuka Dark Fiber Core Manager.</p>
+    <label class="auth-field">
+      <span>Password</span>
+      <input id="auth-password" type="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+    </label>
+    <p id="auth-error" class="auth-error" role="alert"></p>
+    <button id="auth-submit" class="btn btn-primary auth-btn" type="submit">Masuk</button>
+    <p class="auth-foot">Data internal — jangan dibagikan ke luar tim.</p>
+  </form>
+</div>
 <div id="modal-root"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="load-overlay" class="load-overlay" role="progressbar" aria-label="Progres memuat data" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden aria-live="polite">

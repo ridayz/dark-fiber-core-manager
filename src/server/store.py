@@ -404,16 +404,20 @@ TENANTS = [
 def init_db(db_path: str | None = None, seed: bool = True) -> None:
     conn = get_conn(db_path)
     try:
-        conn.executescript(SCHEMA)
-        # One round trip for both the column check and the seed probe: on
-        # Turso a cold start used to pay four separate HTTP calls here.
-        info, counted = fetch_many(
+        # Fast path: on Turso every statement is a network round trip.
+        # Batch existence + schema probe in one call, then only run the full
+        # schema script when the database is actually empty.
+        exists_rows, info, counted = fetch_many(
             conn,
             [
+                ("SELECT name FROM sqlite_master WHERE type='table' AND name='allocations'", ()),
                 ("PRAGMA table_info(cables)", ()),
                 ("SELECT COUNT(*) AS c FROM tenants", ()),
             ],
         )
+        if not list(exists_rows):
+            conn.executescript(SCHEMA)
+            info = conn.execute("PRAGMA table_info(cables)").fetchall()
         _migrate(conn, {row["name"] for row in info})
         if seed and list(counted)[0]["c"] == 0:
             seed_demo(conn)
@@ -874,7 +878,6 @@ def list_tenants(conn: sqlite3.Connection) -> list[dict]:
         conn, [(TENANT_LIST_SQL, ()), (TENANT_AGG_SQL, (iso(today()),))]
     )
     return _build_tenants(rows, aggs)
-
 def get_tenant(conn: sqlite3.Connection, tenant_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM tenants WHERE id = ?", (tenant_id,)).fetchone()
     if not row:

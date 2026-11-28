@@ -1,4 +1,4 @@
-/* Dark Fiber Core Manager — single-page frontend, no build step. */
+﻿/* Dark Fiber Core Manager â€” single-page frontend, no build step. */
 (() => {
   "use strict";
 
@@ -25,7 +25,7 @@
 
   function cacheSet(path, value) { cache.set(path, { at: performance.now(), value }); }
 
-  async function apiCached(path, options) {
+  async function api(path, options) {
     const opts = options || {};
     if (opts.method && opts.method !== "GET") return api(path, opts); // write: selalu fresh
     const hit = cacheGet(path);
@@ -86,7 +86,7 @@
     }, 200);
   }
 
-  function loadingState(label = "Memuat data…") {
+  function loadingState(label = "Memuat dataâ€¦") {
     return `<div class="loading"><div class="spin" aria-hidden="true"></div><p>${esc(label)}</p></div>`;
   }
 
@@ -103,7 +103,7 @@
       const hit = cacheGet(path);
       if (hit !== undefined && !fresh) return hit;
     }
-    if (!silent) startLoad(isWrite ? `Menyimpan ${shortPath}…` : `Memuat ${shortPath}…`);
+    if (!silent) startLoad(isWrite ? `Menyimpan ${shortPath}â€¦` : `Memuat ${shortPath}â€¦`);
     let slow = null;
     try {
       const res = await fetch(`/api${path}`, {
@@ -111,7 +111,7 @@
         headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
       });
       if (!silent && _active > 0) {
-        slow = setTimeout(() => progressLoad(60, "Server sedang merespons…"), LOAD.soft);
+        slow = setTimeout(() => progressLoad(60, "Server sedang meresponsâ€¦"), LOAD.soft);
       }
       const isJson = (res.headers.get("content-type") || "").includes("application/json");
       const total = Number(res.headers.get("content-length")) || 0;
@@ -125,7 +125,7 @@
           if (done) break;
           chunks.push(value);
           received += value.byteLength;
-          if (!silent) progressLoad(Math.min(99, (received / total) * 100), `Memuat ${shortPath}…`);
+          if (!silent) progressLoad(Math.min(99, (received / total) * 100), `Memuat ${shortPath}â€¦`);
         }
         text = new TextDecoder().decode(concat(chunks, received));
       } else {
@@ -192,6 +192,50 @@
     searchJump: null,
   };
 
+  // ---------------------------------------------------------------- auth + cache
+  const TOKEN_KEY = "dfcm.token";
+  const apiCache = new Map();
+  const apiInflight = new Map();
+  const API_TTL = 15000;
+
+  function getToken() {
+    try {
+      return localStorage.getItem(TOKEN_KEY) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function setToken(token) {
+    try {
+      if (token) localStorage.setItem(TOKEN_KEY, token);
+      else localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      /* private mode */
+    }
+  }
+
+  function showAuthGate(message = "") {
+    const gate = $("#auth-gate");
+    if (!gate) return;
+    gate.hidden = false;
+    const err = $("#auth-error");
+    if (err) err.textContent = message;
+    const input = $("#auth-password");
+    if (input) setTimeout(() => input.focus(), 40);
+    document.body.classList.add("auth-locked");
+  }
+
+  function hideAuthGate() {
+    const gate = $("#auth-gate");
+    if (gate) gate.hidden = true;
+    document.body.classList.remove("auth-locked");
+  }
+
+  function clearApiCache() {
+    apiCache.clear();
+  }
+
   // ---------------------------------------------------------------- helpers
   const esc = (value) =>
     String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
@@ -211,14 +255,14 @@
   }
 
   function fmtDate(isoDate) {
-    if (!isoDate) return "–";
+    if (!isoDate) return "â€“";
     const [y, m, d] = isoDate.slice(0, 10).split("-").map(Number);
     if (!y || !m || !d) return isoDate;
     return new Date(y, m - 1, d).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
   }
 
   function fmtDateTime(value) {
-    if (!value) return "–";
+    if (!value) return "â€“";
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value;
     return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
@@ -235,11 +279,11 @@
       if (n === prev + 1) {
         prev = n;
       } else {
-        parts.push(start === prev ? `${start}` : `${start}–${prev}`);
+        parts.push(start === prev ? `${start}` : `${start}â€“${prev}`);
         start = prev = n;
       }
     }
-    parts.push(start === prev ? `${start}` : `${start}–${prev}`);
+    parts.push(start === prev ? `${start}` : `${start}â€“${prev}`);
     return parts.join(", ");
   }
 
@@ -295,13 +339,13 @@
   function shortOtb(cable) {
     const panel = String((cable && (cable.panel_code || cable.name)) || "").trim();
     const tab = String((cable && cable.tab_name) || "").trim();
-    if (!panel) return cable ? cable.code || "—" : "—";
+    if (!panel) return cable ? cable.code || "â€”" : "â€”";
     const baseMatch = panel.match(/^(OTB|ODC|MDF|PATCHPANEL|MMR|POE|HH)\s*(\d+(?:\.\d+)?)?/i);
     let base;
     if (baseMatch) {
       const dev = baseMatch[1].toUpperCase();
       const num = baseMatch[2] || "";
-      // OBC tanpa nomor, e.g. ODC JARAKOSTA → keep second word
+      // OBC tanpa nomor, e.g. ODC JARAKOSTA â†’ keep second word
       const second = panel.split(/\s+/)[1] || "";
       if (!num && /^[A-Z][A-Z-]+$/i.test(second) && second.length > 2) base = `${dev} ${second.toUpperCase()}`;
       else base = num ? `${dev} ${num}` : dev;
@@ -366,38 +410,38 @@
       .slice(0, 4);
     const sheetHits = (state.searchResults || []).slice(0, 10);
     pop.innerHTML =
-      (state.searchBusy ? `<div class="sp-head">Mencari…</div>` : "") +
+      (state.searchBusy ? `<div class="sp-head">Mencariâ€¦</div>` : "") +
       (cableHits.length
         ? `<div class="sp-head">Kabel backbone</div>` +
           cableHits
             .map(
               (c) => `<a class="sp-row" href="#/cables/${c.id}">
-                <span class="sp-main"><span class="sp-title">${hl(c.panel_code || c.name, q)}</span><span class="sp-sub">${esc(c.tab_name || "")} · ${num(c.core_count)} core · ${num(c.sheet_used || 0)}/${num(c.sheet_total || 0)} port sheet</span></span>
-                <span class="sp-arrow">›</span>
+                <span class="sp-main"><span class="sp-title">${hl(c.panel_code || c.name, q)}</span><span class="sp-sub">${esc(c.tab_name || "")} Â· ${num(c.core_count)} core Â· ${num(c.sheet_used || 0)}/${num(c.sheet_total || 0)} port sheet</span></span>
+                <span class="sp-arrow">â€º</span>
               </a>`,
             )
             .join("")
         : "") +
       (sheetHits.length
-        ? `<div class="sp-head">Port OTB (Google Sheet) · ${num(state.searchResults.length)} hasil</div>` +
+        ? `<div class="sp-head">Port OTB (Google Sheet) Â· ${num(state.searchResults.length)} hasil</div>` +
           sheetHits
             .map((r) => {
-              // Klik → mendarat di Peta OTB tab gedung itu, tabel ke-filter
+              // Klik â†’ mendarat di Peta OTB tab gedung itu, tabel ke-filter
               // ke kata kunci, jadi langsung kelihatan Port berapa + Tujuan + Ket.
               return `<a class="sp-row" href="#/otb/${esc(r.gid)}" data-goto-gid="${esc(r.gid)}" data-goto-q="${esc(q)}">
                 <span class="sp-main">
-                  <span class="sp-title">${esc(r.port || "—")}</span>
-                  <span class="sp-sub">${esc(r.tab_name || r.gid)} · ${esc(r.panel || "")}</span>
-                  <span class="sp-note">→ ${hl(r.destination || "—", q)}${r.note ? ` · ${hl(r.note, q)}` : ""}</span>
+                  <span class="sp-title">${esc(r.port || "â€”")}</span>
+                  <span class="sp-sub">${esc(r.tab_name || r.gid)} Â· ${esc(r.panel || "")}</span>
+                  <span class="sp-note">â†’ ${hl(r.destination || "â€”", q)}${r.note ? ` Â· ${hl(r.note, q)}` : ""}</span>
                 </span>
-                <span class="sp-arrow">›</span>
+                <span class="sp-arrow">â€º</span>
               </a>`;
             })
             .join("") +
-          `<a class="sp-more" href="#/otb">Lihat semua di Peta OTB ›</a>`
+          `<a class="sp-more" href="#/otb">Lihat semua di Peta OTB â€º</a>`
         : "") +
       (cableHits.length === 0 && sheetHits.length === 0 && !state.searchBusy
-        ? `<div class="sp-empty">Tidak ditemukan untuk “${esc(q)}” · coba OTB 96.1, alibaba, Port 11-12</div>`
+        ? `<div class="sp-empty">Tidak ditemukan untuk â€œ${esc(q)}â€ Â· coba OTB 96.1, alibaba, Port 11-12</div>`
         : "");
     pop.hidden = false;
     searchEl.setAttribute("aria-expanded", "true");
@@ -444,18 +488,56 @@
   }
 
   async function api(path, options = {}) {
-    const res = await fetch(`/api${path}`, {
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
-    let data = {};
-    try {
-      data = await res.json();
-    } catch {
-      data = {};
+    const method = (options.method || "GET").toUpperCase();
+    const isGet = method === "GET";
+    const bust = Boolean(options.bust);
+    const key = `${method} ${path}`;
+
+    if (isGet && !bust) {
+      const hit = apiCache.get(key);
+      if (hit && hit.expires > Date.now()) return hit.data;
+      if (apiInflight.has(key)) return apiInflight.get(key);
     }
-    if (!res.ok) throw new Error(data.error || `Permintaan gagal (${res.status})`);
-    return data;
+
+    const { bust: _bust, headers: extraHeaders, ...fetchOptions } = options;
+    const headers = { "Content-Type": "application/json", ...(extraHeaders || {}) };
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const request = (async () => {
+      const res = await fetch(`/api${path}`, {
+        cache: "no-store",
+        ...fetchOptions,
+        method,
+        headers,
+      });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+      if (res.status === 401 && !path.startsWith("/login")) {
+        setToken("");
+        clearApiCache();
+        showAuthGate("Sesi berakhir. Silakan login ulang.");
+        const err = new Error("Sesi berakhir. Silakan login ulang.");
+        err.auth = true;
+        throw err;
+      }
+      if (!res.ok) throw new Error(data.error || `Permintaan gagal (${res.status})`);
+      if (isGet && !bust) apiCache.set(key, { data, expires: Date.now() + API_TTL });
+      return data;
+    })();
+
+    if (isGet) {
+      apiInflight.set(key, request);
+      request.then(
+        () => apiInflight.delete(key),
+        () => apiInflight.delete(key),
+      );
+    }
+    return request;
   }
 
   function toast(message, kind = "ok") {
@@ -477,7 +559,47 @@
   }
 
   function loadingState() {
-    return `<div class="loading">Memuat data…</div>`;
+    const cards = Array.from({ length: 4 })
+      .map(
+        () => `<div class="sk-card">
+          <span class="sk sk-line w40"></span>
+          <span class="sk sk-line"></span>
+          <span class="sk sk-line w70"></span>
+        </div>`,
+      )
+      .join("");
+    return `<div class="skeleton" aria-busy="true" aria-label="Memuat data">
+      <div class="sk-top">
+        <span class="sk sk-title"></span>
+        <span class="sk sk-chip"></span>
+      </div>
+      <div class="sk-grid">${cards}</div>
+      <div class="sk-block">
+        <span class="sk sk-line w40"></span>
+        <span class="sk sk-line"></span>
+        <span class="sk sk-line"></span>
+        <span class="sk sk-line w70"></span>
+      </div>
+      <p class="sk-note"><span class="spinner" aria-hidden="true"></span> Memuat dataâ€¦</p>
+    </div>`;
+  }
+
+  let progressTimer = null;
+  function startProgress() {
+    const bar = $("#route-progress");
+    if (!bar) return;
+    clearTimeout(progressTimer);
+    bar.classList.add("on");
+    bar.classList.remove("done");
+  }
+
+  function stopProgress() {
+    const bar = $("#route-progress");
+    if (!bar) return;
+    bar.classList.add("done");
+    progressTimer = setTimeout(() => {
+      bar.classList.remove("on", "done");
+    }, 320);
   }
 
   // ---------------------------------------------------------------- site board
@@ -558,12 +680,13 @@
   }
 
   // ---------------------------------------------------------------- data
-  async function refreshBasics() {
+  async function refreshBasics({ bust = false } = {}) {
+    const opts = bust ? { bust: true } : {};
     const [summary, tenants, leases, sheetStatus] = await Promise.all([
-      apiCached("/summary"),
-      apiCached("/tenants"),
-      apiCached("/leases"),
-      apiCached("/sheet/status"),
+      api("/summary", opts),
+      api("/tenants", opts),
+      api("/leases", opts),
+      api("/sheet/status", opts),
     ]);
     state.summary = summary;
     state.cables = summary.cables;
@@ -589,7 +712,7 @@
     };
     document.querySelectorAll("[data-nav-count]").forEach((el) => {
       const value = counts[el.dataset.navCount];
-      el.textContent = value === null || value === undefined ? "–" : num(value);
+      el.textContent = value === null || value === undefined ? "â€“" : num(value);
     });
   }
 
@@ -615,47 +738,47 @@
 
     if (route.name === "cables" && route.id && state.cable) {
       title = "Peta core";
-      sub = `${state.cable.code} · ${num(state.cable.core_count)} core`;
+      sub = `${state.cable.code} Â· ${num(state.cable.core_count)} core`;
       primary = `<button class="btn btn-ghost" data-action="cable-edit"><svg class="ico"><use href="#i-edit"/></svg>Edit kabel</button>`;
     } else if (route.name === "tenants" && route.id && state.tenant) {
       title = "Detail tenant";
-      sub = `${state.tenant.code} · ${state.tenant.pic || "Tanpa PIC"}`;
+      sub = `${state.tenant.code} Â· ${state.tenant.pic || "Tanpa PIC"}`;
       primary = `<button class="btn btn-ghost" data-action="tenant-edit"><svg class="ico"><use href="#i-edit"/></svg>Edit tenant</button>`;
     } else if (route.name === "cables") {
       const [t] = titles.cables;
       title = t;
       const plants = state.plants || [];
       const buildings = new Set(plants.map((p) => p.gid)).size;
-      sub = `${state.summary ? state.summary.totals.cables : 0} kabel · ${state.summary ? num(state.summary.totals.capacity) : "–"} core · ${buildings} stasiun dari sheet`;
+      sub = `${state.summary ? state.summary.totals.cables : 0} kabel Â· ${state.summary ? num(state.summary.totals.capacity) : "â€“"} core Â· ${buildings} stasiun dari sheet`;
       primary = `<button class="btn btn-primary" data-action="sheet-sync"><svg class="ico"><use href="#i-clock"/></svg>Sync sheet</button>`;
     } else if (route.name === "tenants") {
       const [t] = titles.tenants;
       title = t;
       const active = state.tenants.filter((x) => x.status === "active").length;
-      sub = `${active} tenant aktif · ${num(state.tenants.reduce((a, x) => a + x.cores, 0))} core dikelola`;
+      sub = `${active} tenant aktif Â· ${num(state.tenants.reduce((a, x) => a + x.cores, 0))} core dikelola`;
       primary = `<button class="btn btn-primary" data-action="tenant-new"><svg class="ico"><use href="#i-plus"/></svg>Tambah tenant</button>`;
     } else if (route.name === "leases") {
       const [t] = titles.leases;
       title = t;
       const attention = state.leases.filter((l) => l.state === "expiring" || l.state === "expired").length;
-      sub = `${state.leases.length} lease berjalan${attention ? ` · ${attention} perlu perhatian` : ""}`;
+      sub = `${state.leases.length} lease berjalan${attention ? ` Â· ${attention} perlu perhatian` : ""}`;
       primary = `<button class="btn btn-primary" data-route="#/cables"><svg class="ico"><use href="#i-plus"/></svg>Buat lease</button>`;
     } else if (route.name === "otb") {
       const status = state.sheetStatus;
       const active = status && route.id ? status.tabs.find((x) => x.gid === route.id) : null;
       if (active && route.sub) {
         title = "Detail OTB";
-        sub = `${active.name} · ${num(active.entries)} entri port di site ini`;
+        sub = `${active.name} Â· ${num(active.entries)} entri port di site ini`;
       } else {
         const [t] = titles.otb;
         title = t;
         sub = active
-          ? `${active.name} · ${num(active.entries)} entri port`
+          ? `${active.name} Â· ${num(active.entries)} entri port`
           : status
-            ? `${status.tabs.length} gedung/rak · ${num(status.total_entries)} entri port`
-            : "Memuat peta OTB…";
+            ? `${status.tabs.length} gedung/rak Â· ${num(status.total_entries)} entri port`
+            : "Memuat peta OTBâ€¦";
       }
-      primary = `<button class="btn btn-primary" data-action="sheet-sync" ${state.sheetSyncing ? "disabled" : ""}><svg class="ico"><use href="#i-clock"/></svg>${state.sheetSyncing ? "Menyinkronkan…" : "Sync sekarang"}</button>`;
+      primary = `<button class="btn btn-primary" data-action="sheet-sync" ${state.sheetSyncing ? "disabled" : ""}><svg class="ico"><use href="#i-clock"/></svg>${state.sheetSyncing ? "Menyinkronkanâ€¦" : "Sync sekarang"}</button>`;
     } else {
       [title, sub] = titles[route.name] || titles.overview;
       primary = `<button class="btn btn-primary" data-route="#/cables">Buka peta kabel</button>`;
@@ -693,7 +816,7 @@
       state.tenant = null;
       state.cableFilter = "all";
       state.coreFilter = "all";
-      // Pindah site ↔ detail OTB tetap di tab sheet yang sama: kata kunci jangan hilang.
+      // Pindah site â†” detail OTB tetap di tab sheet yang sama: kata kunci jangan hilang.
       const sameSheetTab = route.name === "otb" && state.sheetTab && route.id === state.sheetTab;
       if (!sameSheetTab) state.sheetQuery = "";
       // Search jump: langsung ke-filter ke Port yang dicari (mis. WSA).
@@ -706,12 +829,20 @@
     }
 
     try {
+      const needsFetch =
+        changed &&
+        ((route.name === "cables" && route.id) || (route.name === "tenants" && route.id) || route.name === "otb");
+      if (needsFetch) {
+        startProgress();
+        viewEl.innerHTML = loadingState();
+      }
+
       if (route.name === "cables" && route.id) {
-        state.cable = await apiCached(`/cables/${route.id}`);
+        state.cable = await api(`/cables/${route.id}`);
         state.mapMode = panelLayout(state.cable) ? "panel" : "tube";
         buildCoreIndex();
       } else if (route.name === "tenants" && route.id) {
-        state.tenant = await apiCached(`/tenants/${route.id}`);
+        state.tenant = await api(`/tenants/${route.id}`);
       } else if (route.name === "otb") {
         await loadSheet(route);
       }
@@ -720,9 +851,12 @@
       renderView();
       syncSelection();
     } catch (err) {
+      if (err.auth) return;
       state.loading = false;
       updateChrome(route);
       viewEl.innerHTML = emptyState("Data tidak bisa dimuat", err.message, "i-alert");
+    } finally {
+      stopProgress();
     }
   }
 
@@ -738,7 +872,7 @@
   }
 
   async function loadSheet(route, { force = false } = {}) {
-    state.sheetStatus = await apiCached("/sheet/status");
+    state.sheetStatus = await api("/sheet/status", force ? { bust: true } : {});
     const tabs = state.sheetStatus.tabs || [];
     let gid = route.id;
     if (!tabs.some((tab) => tab.gid === gid)) gid = state.sheetTab || (tabs[0] && tabs[0].gid) || "";
@@ -748,7 +882,7 @@
       return;
     }
     if (force || gid !== state.sheetLoadedGid) {
-      const data = await api(`/sheet/entries?gid=${encodeURIComponent(gid)}`, force ? { fresh: true } : {});
+      const data = await api(`/sheet/entries?gid=${encodeURIComponent(gid)}`, force ? { bust: true } : {});
       state.sheetEntries = data.entries || [];
       state.sheetLoadedGid = gid;
     }
@@ -778,7 +912,7 @@
     const summaryRow = otbCableFor(tab ? tab.name : "", detail.panel);
     if (!summaryRow || !summaryRow.cable_id) return;
     if (!state.cable || Number(state.cable.id) !== Number(summaryRow.cable_id)) {
-      state.cable = await apiCached(`/cables/${summaryRow.cable_id}`);
+      state.cable = await api(`/cables/${summaryRow.cable_id}`);
     }
     state.mapMode = panelLayout(state.cable) ? "panel" : "tube";
     state.coreFilter = "all";
@@ -810,7 +944,7 @@
     const ss = state.sheetStatus;
     const syncErr = ss ? (ss.tabs || []).filter((x) => x.error).length : 0;
     const syncLabel = ss
-      ? `Sync ${fmtWhen(ss.last_sync)}${ss.syncing ? " · sedang sync" : ""}${syncErr ? ` · ${syncErr} tab error` : ""}`
+      ? `Sync ${fmtWhen(ss.last_sync)}${ss.syncing ? " Â· sedang sync" : ""}${syncErr ? ` Â· ${syncErr} tab error` : ""}`
       : "Sync sheet belum tersedia";
 
     const groups = siteBoard();
@@ -820,7 +954,7 @@
       <div class="board-head">
         <div>
           <h2 class="board-title">Site &amp; OTB</h2>
-          <p class="board-sub">Klik site untuk lihat OTB dan port-nya · ${num(totalSites)} site · ${num(t.cables)} panel · ${num(t.capacity)} core</p>
+          <p class="board-sub">Klik site untuk lihat OTB dan port-nya Â· ${num(totalSites)} site Â· ${num(t.cables)} panel Â· ${num(t.capacity)} core</p>
           <p class="board-sync ${syncErr ? "board-sync-warn" : ""}"><svg class="ico"><use href="#i-clock"/></svg><span>${esc(syncLabel)}</span></p>
         </div>
         <div class="board-stats">
@@ -841,7 +975,7 @@
             </div>
             <div class="board-cards">
               ${g.sites.length ? g.sites.map((site) => `
-                <a class="site-card" href="#/otb/${encodeURIComponent(site.gid)}" title="${esc(site.name)} · ${num(site.otb)} OTB · ${num(site.cores)} core">
+                <a class="site-card" href="#/otb/${encodeURIComponent(site.gid)}" title="${esc(site.name)} Â· ${num(site.otb)} OTB Â· ${num(site.cores)} core">
                   <span class="site-card-top">
                     <span class="site-avatar" style="color:${g.accent}">${esc(siteInitials(site.name))}</span>
                     <span class="site-name">${esc(site.name)}</span>
@@ -861,7 +995,7 @@
             <h3 class="panel-title">Core terpakai per area</h3>
             <p class="panel-meta">Gabungan lease + port sheet yang teridentifikasi</p>
           </div>
-          <span class="panel-meta">${num(t.used_combined ?? t.leased)} core · ${pct(t.utilization_combined ?? t.utilization)}</span>
+          <span class="panel-meta">${num(t.used_combined ?? t.leased)} core Â· ${pct(t.utilization_combined ?? t.utilization)}</span>
         </div>
         <div class="panel-body">${areaChart(groups)}</div>
       </section>
@@ -889,7 +1023,7 @@
                   <div class="size-top"><span class="size-label">${row.size} core</span><span class="size-pct">${pct(row.capacity ? ((row.used_combined ?? row.leased) / row.capacity) * 100 : 0)}</span></div>
                   <div class="meter"><span style="width:${row.capacity ? Math.min(100, ((row.used_combined ?? row.leased) / row.capacity) * 100) : 0}%"></span></div>
                   <div class="size-fig">${num(row.used_combined ?? row.leased)} / ${num(row.capacity)} core terpakai</div>
-                  ${row.sheet_total ? `<div class="size-sheet">${num(row.sheet_used)}/${num(row.sheet_total)} port sheet · ${num(row.sheet_used_cores)} core sheet · ${num(row.leased)} lease</div>` : ""}
+                  ${row.sheet_total ? `<div class="size-sheet">${num(row.sheet_used)}/${num(row.sheet_total)} port sheet Â· ${num(row.sheet_used_cores)} core sheet Â· ${num(row.leased)} lease</div>` : ""}
                 </div>`).join("")}
             </div>
           </div>
@@ -918,7 +1052,7 @@
             <div class="panel-head">
               <div>
                 <h3 class="panel-title">Port sheet kepake</h3>
-                <p class="panel-meta">Data asli Peta OTB · Tujuan terisi · sync Google Sheet</p>
+                <p class="panel-meta">Data asli Peta OTB Â· Tujuan terisi Â· sync Google Sheet</p>
               </div>
               <a class="panel-link" href="#/otb">Peta OTB <svg class="ico"><use href="#i-chevron"/></svg></a>
             </div>
@@ -928,7 +1062,7 @@
                   <a class="sheet-row" href="#/cables/${row.cable_id}">
                     <span class="sheet-main">
                       <span class="sheet-name">${esc(row.panel_code || row.name)}</span>
-                      <span class="sheet-sub">${esc(row.tab_name || "")} · ${num(row.sheet_used)}/${num(row.sheet_total)} port · ${num(row.sheet_used_cores)} core</span>
+                      <span class="sheet-sub">${esc(row.tab_name || "")} Â· ${num(row.sheet_used)}/${num(row.sheet_total)} port Â· ${num(row.sheet_used_cores)} core</span>
                     </span>
                     <span class="sheet-pct">${pct(row.sheet_total ? (row.sheet_used / row.sheet_total) * 100 : 0)}</span>
                     <span class="sheet-bar"><span style="width:${row.sheet_total ? Math.min(100, (row.sheet_used / row.sheet_total) * 100) : 0}%"></span></span>
@@ -943,10 +1077,10 @@
   function cableBarsRow(cable) {
     const total = cable.core_count;
     const segments = cable.mix
-      .map((m) => `<span class="seg" style="width:${(m.cores / total) * 100}%;background:${m.color}" title="${esc(m.name)} · ${num(m.cores)} core"></span>`)
+      .map((m) => `<span class="seg" style="width:${(m.cores / total) * 100}%;background:${m.color}" title="${esc(m.name)} Â· ${num(m.cores)} core"></span>`)
       .join("");
     const sheetBadge = cable.sheet_total
-      ? `<span class="sheet-badge" title="Port sheet terpakai (Tujuan terisi) · ${esc(cable.tab_name || "")}">${esc(cable.tab_name || "Sheet")} ${num(cable.sheet_used)}/${num(cable.sheet_total)} port · ${num(cable.sheet_used_cores)} core</span>`
+      ? `<span class="sheet-badge" title="Port sheet terpakai (Tujuan terisi) Â· ${esc(cable.tab_name || "")}">${esc(cable.tab_name || "Sheet")} ${num(cable.sheet_used)}/${num(cable.sheet_total)} port Â· ${num(cable.sheet_used_cores)} core</span>`
       : "";
     const usedCombined = cable.used_combined ?? cable.leased;
     const utilCombined = cable.utilization_combined ?? cable.utilization;
@@ -970,13 +1104,13 @@
     const percent = cable.core_count ? ((cable.used_combined ?? cable.leased) / cable.core_count) * 100 : 0;
     const segments = cable.mix
       ? cable.mix
-          .map((m) => `<span class="seg" style="width:${(m.cores / cable.core_count) * 100}%;background:${m.color}" title="${esc(m.name)} · ${num(m.cores)} core"></span>`)
+          .map((m) => `<span class="seg" style="width:${(m.cores / cable.core_count) * 100}%;background:${m.color}" title="${esc(m.name)} Â· ${num(m.cores)} core"></span>`)
           .join("")
       : "";
     const route = cable.route ? esc(String(cable.route).slice(0, 90)) : "<span class='muted'>Tanpa keterangan</span>";
     const title = cable.panel_code || cable.name;
     const sheetLine = cable.sheet_total
-      ? `<div class="sheet-line"><span class="sheet-dot"></span><span><strong>${num(cable.sheet_used)}/${num(cable.sheet_total)} port</strong> sheet kepake (Tujuan terisi) · ${num(cable.sheet_used_cores)} core teridentifikasi</span></div>`
+      ? `<div class="sheet-line"><span class="sheet-dot"></span><span><strong>${num(cable.sheet_used)}/${num(cable.sheet_total)} port</strong> sheet kepake (Tujuan terisi) Â· ${num(cable.sheet_used_cores)} core teridentifikasi</span></div>`
       : "";
     const rack = cable.tab_name || (isPlant ? "Sheet" : "Manual");
     const code = cable.code || "";
@@ -988,14 +1122,14 @@
       <p class="route">${route}</p>
       <div class="fiber-strip" title="Kode warna 12 fiber TIA-598">${colors.map((hex) => `<span style="background:${hex}"></span>`).join("")}</div>
       <div class="cable-metrics">
-        ${cable.core_count ? `<div><span class="metric-big">${num(cable.used_combined ?? cable.leased)}</span> <span class="metric-sub">/ ${num(cable.core_count)} core</span></div>` : `<div><span class="metric-big">–</span> <span class="metric-sub">ukuran belum terdeteksi</span></div>`}
+        ${cable.core_count ? `<div><span class="metric-big">${num(cable.used_combined ?? cable.leased)}</span> <span class="metric-sub">/ ${num(cable.core_count)} core</span></div>` : `<div><span class="metric-big">â€“</span> <span class="metric-sub">ukuran belum terdeteksi</span></div>`}
         ${cable.core_count ? `<span class="metric-pct">${pct(cable.utilization_combined ?? cable.utilization)}</span>` : ""}
       </div>
       ${cable.core_count && cable.sheet_total ? `<div class="metric-breakdown">${num(cable.leased)} lease + ${num(cable.sheet_only_cores ?? 0)} sheet core</div>` : ""}
       <div class="stack">${segments}</div>
       ${sheetLine}
       <div class="card-foot">
-        <span>${isPlant ? `${num(cable.total_ports)} port${cable.section ? ` · ${esc(cable.section)}` : ""}` : `${cable.length_km ? `${num(cable.length_km)} km` : "–"} · ${cable.installed_year || "–"}`}</span>
+        <span>${isPlant ? `${num(cable.total_ports)} port${cable.section ? ` Â· ${esc(cable.section)}` : ""}` : `${cable.length_km ? `${num(cable.length_km)} km` : "â€“"} Â· ${cable.installed_year || "â€“"}`}</span>
         <span class="link">Peta core <svg class="ico"><use href="#i-chevron"/></svg></span>
       </div>
     </a>`;
@@ -1013,7 +1147,7 @@
 
     viewEl.innerHTML = `
       <div class="list-toolbar">
-        <span class="panel-meta">${filtered.length} dari ${state.cables.length} kabel · ${new Set(filtered.map((c) => c.gid).filter(Boolean)).size} stasiun sheet · ${num(totalSheetUsed)}/${num(totalSheet)} port sheet kepake</span>
+        <span class="panel-meta">${filtered.length} dari ${state.cables.length} kabel Â· ${new Set(filtered.map((c) => c.gid).filter(Boolean)).size} stasiun sheet Â· ${num(totalSheetUsed)}/${num(totalSheet)} port sheet kepake</span>
         <div class="segmented" role="group" aria-label="Filter ukuran kabel">
           <button class="seg-btn ${state.cableFilter === "all" ? "active" : ""}" data-action="filter-cable" data-size="all">Semua</button>
           ${sizes.map((s) => `<button class="seg-btn ${state.cableFilter === String(s) ? "active" : ""}" data-action="filter-cable" data-size="${s}">${s}</button>`).join("")}
@@ -1044,7 +1178,7 @@
         <div class="map-toolbar">
           <div>
             <h3 class="panel-title">Peta core</h3>
-            <p class="panel-meta">${showPanel ? layout.meta : `${c.tubes.length} tube × 12 core`}${readOnly ? "" : " · klik core untuk memilih"} · ${num(c.sheet_used_cores || 0)} core dari sheet</p>
+            <p class="panel-meta">${showPanel ? layout.meta : `${c.tubes.length} tube Ã— 12 core`}${readOnly ? "" : " Â· klik core untuk memilih"} Â· ${num(c.sheet_used_cores || 0)} core dari sheet</p>
           </div>
           <div class="map-tools">
             ${layout ? `<div class="segmented" role="group" aria-label="Tampilan peta">
@@ -1070,7 +1204,7 @@
           : `<div class="tube-grid">${c.tubes.map((tube) => tubeCard(tube, c, readOnly)).join("")}</div>`}
         <div class="map-foot">
           <span>${showPanel ? layout.foot : "Garis bawah tiap core mengikuti kode warna 12 fiber TIA-598"}</span>
-          <span>${num(used)} terpakai · ${num(free)} tersedia</span>
+          <span>${num(used)} terpakai Â· ${num(free)} tersedia</span>
         </div>
       </section>
       ${showTray ? `<div class="tray" id="tray" hidden>
@@ -1122,14 +1256,14 @@
         <div class="stat-cell"><div class="stat-label">Core sheet</div><div class="stat-value">${num(c.sheet_used_cores || 0)}</div></div>
         <div class="stat-cell"><div class="stat-label">Tersedia</div><div class="stat-value">${num(free)}</div></div>
         <div class="stat-cell"><div class="stat-label">Utilisasi</div><div class="stat-value accent">${pct(c.utilization_combined ?? c.utilization)}</div></div>` : `
-        <div class="stat-cell"><div class="stat-label">Ukuran core</div><div class="stat-value">–</div></div>
+        <div class="stat-cell"><div class="stat-label">Ukuran core</div><div class="stat-value">â€“</div></div>
         <div class="stat-cell"><div class="stat-label">Port terdaftar</div><div class="stat-value">${num(c.total_ports)}</div></div>
         <div class="stat-cell"><div class="stat-label">Port sheet kepake</div><div class="stat-value">${num(c.sheet_used || 0)}<small>/${num(c.sheet_total || 0)}</small></div></div>`}
-        <div class="stat-cell"><div class="stat-label">Panjang</div><div class="stat-value">${c.length_km ? num(c.length_km) : "–"} <small>km</small></div></div>
-        <div class="stat-cell"><div class="stat-label">Terpasang</div><div class="stat-value">${c.installed_year || "–"}</div></div>
+        <div class="stat-cell"><div class="stat-label">Panjang</div><div class="stat-value">${c.length_km ? num(c.length_km) : "â€“"} <small>km</small></div></div>
+        <div class="stat-cell"><div class="stat-label">Terpasang</div><div class="stat-value">${c.installed_year || "â€“"}</div></div>
       </div>
 
-      ${c.sheet_total ? `<div class="sheet-banner">Sheet <strong>${esc(c.tab_name || "")}</strong> · ${num(c.sheet_used)} dari ${num(c.sheet_total)} port Tujuan terisi · <strong>${num(c.sheet_used_cores)} core</strong> teridentifikasi dari nomor port · ${num(c.sheet_only_cores || 0)} core sheet belum ada lease</div>` : ""}
+      ${c.sheet_total ? `<div class="sheet-banner">Sheet <strong>${esc(c.tab_name || "")}</strong> Â· ${num(c.sheet_used)} dari ${num(c.sheet_total)} port Tujuan terisi Â· <strong>${num(c.sheet_used_cores)} core</strong> teridentifikasi dari nomor port Â· ${num(c.sheet_only_cores || 0)} core sheet belum ada lease</div>` : ""}
 
       ${cableMapSection(c)}
 
@@ -1138,7 +1272,7 @@
         <div class="panel-head">
           <div>
             <h3 class="panel-title">Port OTB dari Google Sheet</h3>
-            <p class="panel-meta">${esc(c.tab_name || "")} · ${esc(c.section || "")} · ${c.entries.length} port · ${num(c.sheet_used || 0)} kepake (Tujuan terisi)</p>
+            <p class="panel-meta">${esc(c.tab_name || "")} Â· ${esc(c.section || "")} Â· ${c.entries.length} port Â· ${num(c.sheet_used || 0)} kepake (Tujuan terisi)</p>
           </div>
         </div>
         <div class="table-wrap" style="border:0;border-radius:0">
@@ -1147,9 +1281,9 @@
             <tbody>
               ${c.entries.map((e) => `<tr class="${e.used ? "row-used" : ""}">
                 <td>${e.used ? '<span class="state state-ok"><span class="dot"></span>Kepake</span>' : '<span class="state state-muted"><span class="dot"></span>Kosong</span>'}</td>
-                <td class="mono-sm">${esc(e.port) || "–"}${e.core_nos && e.core_nos.length ? `<div class="cell-sub mono">core ${e.core_nos.length} · ${esc(e.core_nos.slice(0, 8).join(", "))}${e.core_nos.length > 8 ? "…" : ""}</div>` : ""}</td>
-                <td>${esc(e.destination) || "–"}</td>
-                <td>${esc(e.note) || "–"}</td>
+                <td class="mono-sm">${esc(e.port) || "â€“"}${e.core_nos && e.core_nos.length ? `<div class="cell-sub mono">core ${e.core_nos.length} Â· ${esc(e.core_nos.slice(0, 8).join(", "))}${e.core_nos.length > 8 ? "â€¦" : ""}</div>` : ""}</td>
+                <td>${esc(e.destination) || "â€“"}</td>
+                <td>${esc(e.note) || "â€“"}</td>
               </tr>`).join("")}
             </tbody>
           </table>
@@ -1173,8 +1307,8 @@
         slotRows: 3,
         perBigCol: 24,
         total: 96,
-        meta: "Panel OTB 72 (fisik 96) · 4 kolom × 24 core",
-        foot: "Panel LC: pola staggered, 1 kolom = 24 core (1-4, 5-8, ... 21-24), 4 kolom 2×2, slot 73-96 void",
+        meta: "Panel OTB 72 (fisik 96) Â· 4 kolom Ã— 24 core",
+        foot: "Panel LC: pola staggered, 1 kolom = 24 core (1-4, 5-8, ... 21-24), 4 kolom 2Ã—2, slot 73-96 void",
       };
     }
     if (cable.core_count === 144) {
@@ -1182,7 +1316,7 @@
         cols: 24,
         rows: 4,
         bands: 2,
-        meta: "Panel OTB 144 (fisik 192) · 24 kolom × 2 baris",
+        meta: "Panel OTB 144 (fisik 192) Â· 24 kolom Ã— 2 baris",
         foot: "Panel LC: 4 core per kolom, 24 kolom per baris, 2 baris (1-96, 97-192)",
       };
     }
@@ -1192,7 +1326,7 @@
         groups: 12,
         perRow: 4,
         rows: 6,
-        meta: "Panel OTB 288 · 12 kolom × 24 core (4 core per baris)",
+        meta: "Panel OTB 288 Â· 12 kolom Ã— 24 core (4 core per baris)",
         foot: "Panel LC: tiap kolom 24 core dibaca 4 ke samping lalu turun (1-4, 5-8, ... 21-24), 12 kolom (1-288)",
       };
     }
@@ -1239,8 +1373,8 @@
         const last = base + layout.perBigCol;
         const voidClass = first > cable.core_count ? " panel-72-big-void" : "";
         bigCols.push(
-          `<div class="panel-72-big${voidClass}" title="Kolom ${bc + 1} · core ${first}–${last}${first > cable.core_count ? " (void)" : ""}">
-            <div class="panel-72-big-label">Kolom ${bc + 1} · ${first}–${last}</div>
+          `<div class="panel-72-big${voidClass}" title="Kolom ${bc + 1} Â· core ${first}â€“${last}${first > cable.core_count ? " (void)" : ""}">
+            <div class="panel-72-big-label">Kolom ${bc + 1} Â· ${first}â€“${last}</div>
             <div class="panel-72-big-grid">${smallCols.join("")}</div>
           </div>`,
         );
@@ -1262,7 +1396,7 @@
         const first = base + 1;
         const last = base + layout.perRow * layout.rows;
         blocks.push(
-          `<div class="panel-col-288" title="Kolom ${g + 1} · core ${first}–${last}">${cells.join("")}</div>`,
+          `<div class="panel-col-288" title="Kolom ${g + 1} Â· core ${first}â€“${last}">${cells.join("")}</div>`,
         );
       }
       return `<div class="panel-map-wrap panel-map-wrap-scroll"><div class="panel-map panel-map-288">${blocks.join("")}</div></div>`;
@@ -1284,12 +1418,12 @@
         const first = base + 1;
         const last = Math.min(base + rows, totalSlots);
         columns.push(
-          `<div class="panel-col" title="Kolom ${band * cols + col + 1} · core ${first}–${last}">${cells.join("")}</div>`,
+          `<div class="panel-col" title="Kolom ${band * cols + col + 1} Â· core ${first}â€“${last}">${cells.join("")}</div>`,
         );
       }
       const bandFirst = band * cols * rows + 1;
       const bandLast = bandFirst + cols * rows - 1;
-      const label = bands > 1 ? `<span class="band-label">core ${bandFirst}–${bandLast}</span>` : "";
+      const label = bands > 1 ? `<span class="band-label">core ${bandFirst}â€“${bandLast}</span>` : "";
       bandHtml.push(`<div class="panel-band">${label}<div class="band-cols" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${columns.join("")}</div></div>`);
     }
     const className = bands > 1 ? "panel-map panel-map-bands" : `panel-map panel-map-${cable.core_count}`;
@@ -1324,12 +1458,12 @@
 
     let title;
     if (core.allocation) {
-      title = `Core ${core.no} · Tube ${core.tube} pos ${core.pos} · ${core.color_name} · ${core.allocation.tenant_name} · ${core.allocation.purpose} · s/d ${fmtDate(core.allocation.end_date)}`;
-      if (core.sheet) title += ` · Sheet: ${core.sheet.port} → ${core.sheet.destination}`;
+      title = `Core ${core.no} Â· Tube ${core.tube} pos ${core.pos} Â· ${core.color_name} Â· ${core.allocation.tenant_name} Â· ${core.allocation.purpose} Â· s/d ${fmtDate(core.allocation.end_date)}`;
+      if (core.sheet) title += ` Â· Sheet: ${core.sheet.port} â†’ ${core.sheet.destination}`;
     } else if (core.sheet) {
-      title = `Core ${core.no} · Tube ${core.tube} pos ${core.pos} · ${core.color_name} · Sheet ${core.sheet.port} → ${core.sheet.destination}${core.sheet.note ? ` · ${core.sheet.note}` : ""}`;
+      title = `Core ${core.no} Â· Tube ${core.tube} pos ${core.pos} Â· ${core.color_name} Â· Sheet ${core.sheet.port} â†’ ${core.sheet.destination}${core.sheet.note ? ` Â· ${core.sheet.note}` : ""}`;
     } else {
-      title = `Core ${core.no} · Tube ${core.tube} pos ${core.pos} · ${core.color_name} · Tersedia`;
+      title = `Core ${core.no} Â· Tube ${core.tube} pos ${core.pos} Â· ${core.color_name} Â· Tersedia`;
     }
 
     let style;
@@ -1363,10 +1497,10 @@
                     <div><div class="cell-main">${esc(t.name)}</div><div class="cell-sub mono">${esc(t.code)}</div></div>
                   </div>
                 </td>
-                <td><div class="cell-main">${esc(t.pic || "–")}</div><div class="cell-sub">${esc(t.contact || t.email || "–")}</div></td>
+                <td><div class="cell-main">${esc(t.pic || "â€“")}</div><div class="cell-sub">${esc(t.contact || t.email || "â€“")}</div></td>
                 <td class="num mono-sm">${num(t.cores)}</td>
                 <td class="num mono-sm">${num(t.leases)}</td>
-                <td><span class="mono-sm">${t.next_end ? fmtDate(t.next_end) : "–"}</span></td>
+                <td><span class="mono-sm">${t.next_end ? fmtDate(t.next_end) : "â€“"}</span></td>
                 <td>${tenantStatusTag(t.status)}</td>
                 <td><div class="cell-actions"><svg class="ico" style="width:15px;height:15px;color:var(--mut)"><use href="#i-chevron"/></svg></div></td>
               </tr>`).join("")}
@@ -1394,7 +1528,7 @@
               <span class="code-chip">${esc(t.code)}</span>
               ${tenantStatusTag(t.status)}
             </div>
-            <p class="detail-sub">${esc(t.pic || "Tanpa PIC")} · ${esc(t.contact || t.email || "Kontak belum diisi")}</p>
+            <p class="detail-sub">${esc(t.pic || "Tanpa PIC")} Â· ${esc(t.contact || t.email || "Kontak belum diisi")}</p>
           </div>
         </div>
       </div>
@@ -1404,7 +1538,7 @@
           <div class="panel-head">
             <div>
               <h3 class="panel-title">Lease aktif</h3>
-              <p class="panel-meta">${leases.length} kontrak · ${num(t.cores)} core</p>
+              <p class="panel-meta">${leases.length} kontrak Â· ${num(t.cores)} core</p>
             </div>
           </div>
           <div class="panel-body" style="padding-left:0;padding-right:0;padding-bottom:0">
@@ -1416,7 +1550,7 @@
                     <tr class="row-link" data-lease-open="${esc(l.batch_id)}">
                       <td><span class="mono-sm">${esc(l.batch_id)}</span><div class="cell-sub">${esc(l.purpose)}</div></td>
                       <td><div class="cell-main">${esc(l.cable_name)}</div><div class="cell-sub mono">${esc(l.cable_code)}</div></td>
-                      <td><span class="mono-sm">${num(l.cores)} core</span><div class="cell-sub">${l.core_from}–${l.core_to}</div></td>
+                      <td><span class="mono-sm">${num(l.cores)} core</span><div class="cell-sub">${l.core_from}â€“${l.core_to}</div></td>
                       <td><span class="mono-sm">${fmtDate(l.start_date)}</span><div class="cell-sub">s/d ${fmtDate(l.end_date)}</div></td>
                       <td>${stateTag(l.state)}</td>
                       <td><span class="state state-${remainingTone(l) || "muted"}">${remainingLabel(l)}</span></td>
@@ -1432,10 +1566,10 @@
             <div class="panel-head"><h3 class="panel-title">Kontak</h3></div>
             <div class="panel-body">
               <div class="def-grid" style="grid-template-columns:1fr">
-                <div class="contact-item"><div class="def-label">PIC</div><div class="def-value">${esc(t.pic || "–")}</div></div>
-                <div class="contact-item"><div class="def-label">Telepon</div><div class="def-value mono">${esc(t.contact || "–")}</div></div>
-                <div class="contact-item"><div class="def-label">Email</div><div class="def-value">${esc(t.email || "–")}</div></div>
-                <div class="contact-item"><div class="def-label">Catatan</div><div class="def-value" style="color:var(--tx2)">${esc(t.notes || "–")}</div></div>
+                <div class="contact-item"><div class="def-label">PIC</div><div class="def-value">${esc(t.pic || "â€“")}</div></div>
+                <div class="contact-item"><div class="def-label">Telepon</div><div class="def-value mono">${esc(t.contact || "â€“")}</div></div>
+                <div class="contact-item"><div class="def-label">Email</div><div class="def-value">${esc(t.email || "â€“")}</div></div>
+                <div class="contact-item"><div class="def-label">Catatan</div><div class="def-value" style="color:var(--tx2)">${esc(t.notes || "â€“")}</div></div>
               </div>
             </div>
           </section>
@@ -1595,13 +1729,13 @@
     const cores = [...state.selection.keys()].sort((a, b) => a - b);
     const tenantOptions = state.tenants
       .filter((t) => t.status === "active")
-      .map((t) => `<option value="${t.id}">${esc(t.name)} · ${esc(t.code)}</option>`)
+      .map((t) => `<option value="${t.id}">${esc(t.name)} Â· ${esc(t.code)}</option>`)
       .join("");
     const start = todayISO();
     const end = addDaysISO(start, 365);
 
     openModal(`
-      ${modalHead("Alokasikan core", `${c.name} · ${c.code}`)}
+      ${modalHead("Alokasikan core", `${c.name} Â· ${c.code}`)}
       <form id="form-allocate">
         <div class="modal-body">
           <div class="selected-box">
@@ -1640,7 +1774,7 @@
       return;
     }
     openModal(`
-      ${modalHead(lease.batch_id, `${lease.tenant_name} · ${lease.cable_name}`)}
+      ${modalHead(lease.batch_id, `${lease.tenant_name} Â· ${lease.cable_name}`)}
       <div class="modal-body">
         <div class="def-grid">
           <div><div class="def-label">Tenant</div><div class="def-value">${esc(lease.tenant_name)}</div></div>
@@ -1668,7 +1802,7 @@
     if (!lease) return;
     const nextEnd = addDaysISO(lease.end_date, 365);
     openModal(`
-      ${modalHead("Perpanjang lease", `${lease.batch_id} · ${lease.tenant_name}`)}
+      ${modalHead("Perpanjang lease", `${lease.batch_id} Â· ${lease.tenant_name}`)}
       <form id="form-extend">
         <div class="modal-body">
           <input type="hidden" name="batch_id" value="${esc(lease.batch_id)}">
@@ -1703,7 +1837,7 @@
     const lease = state.leases.find((l) => l.batch_id === batchId);
     if (!lease) return;
     openModal(`
-      ${modalHead("Lepas core", `${lease.batch_id} · ${lease.tenant_name}`)}
+      ${modalHead("Lepas core", `${lease.batch_id} Â· ${lease.tenant_name}`)}
       <form id="form-release">
         <div class="modal-body">
           <input type="hidden" name="batch_id" value="${esc(lease.batch_id)}">
@@ -1793,11 +1927,11 @@
           </div>
           <div class="field field-row">
             <label for="cb-name">Nama kabel</label>
-            <input id="cb-name" name="name" value="${isEdit ? esc(cable.name) : ""}" placeholder="Jakarta – Bandung" required>
+            <input id="cb-name" name="name" value="${isEdit ? esc(cable.name) : ""}" placeholder="Jakarta â€“ Bandung" required>
           </div>
           <div class="field">
             <label for="cb-route">Rute</label>
-            <input id="cb-route" name="route" value="${isEdit ? esc(cable.route) : ""}" placeholder="Jakarta – Purwakarta – Bandung" required>
+            <input id="cb-route" name="route" value="${isEdit ? esc(cable.route) : ""}" placeholder="Jakarta â€“ Purwakarta â€“ Bandung" required>
           </div>
           <div class="grid2">
             <div class="field">
@@ -1859,18 +1993,18 @@
         updateChrome(getRoute());
         renderView();
         try {
-          const result = await api("/sheet/sync", { method: "POST" });
+          const result = await api("/sheet/sync", { method: "POST", bust: true });
           state.sheetLoadedGid = "";
           state.sheetSyncing = false;
           // Sync also rebuilds the cable/plant inventory, so refresh everything.
-          await refreshBasics();
+          await refreshBasics({ bust: true });
           await renderApp();
           if (result.busy) {
             toast("Sync sedang berjalan, coba lagi sebentar", "warn");
           } else if (result.errors) {
             toast(`Sync selesai, ${result.errors} tab gagal diakses`, "warn");
           } else if (result.changed) {
-            toast(`Sync selesai · ${result.changed} tab diperbarui`);
+            toast(`Sync selesai Â· ${result.changed} tab diperbarui`);
           } else {
             toast("Semua tab sudah yang terbaru");
           }
@@ -1931,7 +2065,7 @@
       state.selection.clear();
       state.lastPicked = null;
     }
-    await refreshBasics();
+    await refreshBasics({ bust: true });
     await renderApp();
     if (message) toast(message);
   }
@@ -1952,10 +2086,10 @@
     };
     const old = button.textContent;
     button.disabled = true;
-    button.textContent = "Menyimpan…";
+    button.textContent = "Menyimpanâ€¦";
     try {
       const lease = await api("/leases", { method: "POST", body: JSON.stringify(payload) });
-      await refreshAfterChange(`${num(lease.core_count)} core dialokasikan · ${lease.batch_id}`, { clearSelection: true });
+      await refreshAfterChange(`${num(lease.core_count)} core dialokasikan Â· ${lease.batch_id}`, { clearSelection: true });
     } catch (err) {
       showFormError(form, err.message);
       toast(err.message, "bad");
@@ -1980,7 +2114,7 @@
     if (!id) payload.code = data.get("code");
     const old = button.textContent;
     button.disabled = true;
-    button.textContent = "Menyimpan…";
+    button.textContent = "Menyimpanâ€¦";
     try {
       if (id) {
         await api(`/tenants/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
@@ -2014,7 +2148,7 @@
     if (!id) payload.core_count = Number(data.get("core_count"));
     const old = button.textContent;
     button.disabled = true;
-    button.textContent = "Menyimpan…";
+    button.textContent = "Menyimpanâ€¦";
     try {
       if (id) {
         await api(`/cables/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
@@ -2042,7 +2176,7 @@
     const payload = { end_date: data.get("end_date"), purpose: data.get("purpose"), notes: data.get("notes") || null };
     const old = button.textContent;
     button.disabled = true;
-    button.textContent = "Menyimpan…";
+    button.textContent = "Menyimpanâ€¦";
     try {
       await api(`/leases/${batch}`, { method: "PATCH", body: JSON.stringify(payload) });
       await refreshAfterChange(`Lease ${batch} diperpanjang`);
@@ -2061,7 +2195,7 @@
     const batch = data.get("batch_id");
     const old = button.textContent;
     button.disabled = true;
-    button.textContent = "Melepas…";
+    button.textContent = "Melepasâ€¦";
     try {
       const result = await api(`/leases/${batch}`, { method: "DELETE" });
       await refreshAfterChange(`${num(result.released_cores)} core dilepas dari ${batch}`);
@@ -2076,7 +2210,7 @@
 
   // ------------------------------------------------------------- OTB view
   function fmtWhen(value) {
-    if (!value) return "–";
+    if (!value) return "â€“";
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value;
     return d.toLocaleString("id-ID", {
@@ -2095,11 +2229,11 @@
     return match ? Number(match[1]) : 0;
   }
 
-  // "Port 11-12" → [11, 12] · "Port 27&30" → [27, 30] · "Port 13" → [13]
+  // "Port 11-12" â†’ [11, 12] Â· "Port 27&30" â†’ [27, 30] Â· "Port 13" â†’ [13]
   function portCores(port) {
     const text = String(port || "");
     const found = new Set();
-    const range = /(\d+)\s*[-–]\s*(\d+)/g;
+    const range = /(\d+)\s*[-â€“]\s*(\d+)/g;
     let match;
     while ((match = range.exec(text)) !== null) {
       const start = Number(match[1]);
@@ -2205,7 +2339,7 @@
             <p>Sync terakhir <span class="mono">${fmtWhen(status.last_sync)}</span></p>
             <p class="muted">Otomatis tiap ${num(status.poll_seconds)} detik</p>
             ${failed.length ? `<p class="state state-warn"><span class="dot"></span>${failed.length} tab gagal diakses</p>` : ""}
-            <a class="link" href="${esc(status.spreadsheet_url)}" target="_blank" rel="noopener">Buka Google Sheet ↗</a>
+            <a class="link" href="${esc(status.spreadsheet_url)}" target="_blank" rel="noopener">Buka Google Sheet â†—</a>
           </div>
         </aside>`;
 
@@ -2230,9 +2364,9 @@
         <section class="otb-main">
           <div class="card otb-head">
             <div class="otb-head-main">
-              <a class="otb-back" href="#/otb/${encodeURIComponent(activeGid)}">← Semua OTB · ${esc(tab ? tab.name : "")}</a>
+              <a class="otb-back" href="#/otb/${encodeURIComponent(activeGid)}">â† Semua OTB Â· ${esc(tab ? tab.name : "")}</a>
               <h2 class="otb-title">${esc(detail.panel || "Tanpa panel")}</h2>
-              <p class="otb-sub" id="otb-count">${num(rows.length)}${q ? ` dari ${num(detail.rows.length)}` : ""} entri port · ${num(usage.used)}${usage.size ? `/${num(usage.size)}` : ""} core${detail.section ? ` · ${esc(detail.section)}` : ""}</p>
+              <p class="otb-sub" id="otb-count">${num(rows.length)}${q ? ` dari ${num(detail.rows.length)}` : ""} entri port Â· ${num(usage.used)}${usage.size ? `/${num(usage.size)}` : ""} core${detail.section ? ` Â· ${esc(detail.section)}` : ""}</p>
             </div>
             <div class="otb-head-actions">
               ${searchBox("Cari port, tujuan, keterangan")}
@@ -2262,9 +2396,9 @@
                             .join(" ")
                             .toLowerCase(),
                         )}">
-                          <td class="otb-port">${esc(row.port) || "–"}</td>
-                          <td>${esc(row.destination) || "<span class='muted'>–</span>"}</td>
-                          <td class="otb-note">${esc(row.note) || "<span class='muted'>–</span>"}</td>
+                          <td class="otb-port">${esc(row.port) || "â€“"}</td>
+                          <td>${esc(row.destination) || "<span class='muted'>â€“</span>"}</td>
+                          <td class="otb-note">${esc(row.note) || "<span class='muted'>â€“</span>"}</td>
                         </tr>`,
                       )
                       .join("")}
@@ -2272,7 +2406,7 @@
                 </table></div>`
               : emptyState(
                   q ? "Tidak ada port yang cocok" : "Belum ada port di OTB ini",
-                  q ? `Tidak ada entri yang cocok dengan “${state.sheetQuery}”.` : "Jalankan sync untuk menarik data dari Google Sheets.",
+                  q ? `Tidak ada entri yang cocok dengan â€œ${state.sheetQuery}â€.` : "Jalankan sync untuk menarik data dari Google Sheets.",
                   "i-layers",
                 )
           }
@@ -2294,8 +2428,8 @@
         <section class="otb-main">
           <div class="card otb-head">
             <div class="otb-head-main">
-              <h2 class="otb-title">${esc(tab ? tab.name : "—")}</h2>
-              <p class="otb-sub" id="otb-count">${num(shown.length)}${q ? ` dari ${num(cards.length)}` : ""} OTB · ${num(all.length)} entri port · ${num(totalCores)} core</p>
+              <h2 class="otb-title">${esc(tab ? tab.name : "â€”")}</h2>
+              <p class="otb-sub" id="otb-count">${num(shown.length)}${q ? ` dari ${num(cards.length)}` : ""} OTB Â· ${num(all.length)} entri port Â· ${num(totalCores)} core</p>
             </div>
             ${searchBox("Cari OTB, port, tujuan")}
           </div>
@@ -2310,7 +2444,7 @@
                       (item) => `<a class="otb-card" href="#/otb/${encodeURIComponent(activeGid)}/${item.panel.index}" data-search="${esc(item.search)}">
                         <div class="otb-card-top">
                           <span class="otb-card-rak">${esc(item.panel.section || "Tanpa rak")}</span>
-                          <span class="otb-card-size">${item.size ? `${num(item.size)} core` : "—"}</span>
+                          <span class="otb-card-size">${item.size ? `${num(item.size)} core` : "â€”"}</span>
                         </div>
                         <p class="otb-card-name">${esc(item.panel.panel || "Tanpa panel")}</p>
                         <div class="otb-card-foot">
@@ -2324,7 +2458,7 @@
                 </div>`
               : emptyState(
                   q ? "Tidak ada OTB yang cocok" : "Belum ada data OTB",
-                  q ? `Tidak ada OTB atau port yang cocok dengan “${state.sheetQuery}”.` : "Jalankan sync untuk menarik data dari Google Sheets.",
+                  q ? `Tidak ada OTB atau port yang cocok dengan â€œ${state.sheetQuery}â€.` : "Jalankan sync untuk menarik data dari Google Sheets.",
                   "i-layers",
                 )
           }
@@ -2468,7 +2602,7 @@
     }
     const counter = $("#otb-count");
     if (counter) {
-      counter.textContent = `${num(visibleRows)}${term ? ` dari ${num(rows.length)}` : ""} entri port · ${visibleGroups} panel`;
+      counter.textContent = `${num(visibleRows)}${term ? ` dari ${num(rows.length)}` : ""} entri port Â· ${visibleGroups} panel`;
     }
   });
 
@@ -2494,18 +2628,79 @@
     }
   }, 60000);
 
+  // ---------------------------------------------------------------- auth events
+  const authForm = $("#auth-form");
+  if (authForm) {
+    authForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const input = $("#auth-password");
+      const button = $("#auth-submit");
+      const errorEl = $("#auth-error");
+      if (errorEl) errorEl.textContent = "";
+      button.disabled = true;
+      const old = button.textContent;
+      button.textContent = "Memeriksaâ€¦";
+      try {
+        const res = await api("/login", {
+          method: "POST",
+          bust: true,
+          body: JSON.stringify({ password: input.value }),
+        });
+        if (res.token) setToken(res.token);
+        input.value = "";
+        hideAuthGate();
+        clearApiCache();
+        await boot();
+      } catch (err) {
+        if (errorEl) errorEl.textContent = err.message;
+        input.select();
+      } finally {
+        button.disabled = false;
+        button.textContent = old;
+      }
+    });
+  }
+
+  const logoutEl = $("#logout");
+  if (logoutEl) {
+    logoutEl.addEventListener("click", () => {
+      setToken("");
+      clearApiCache();
+      location.reload();
+    });
+  }
+
   // ---------------------------------------------------------------- boot
   async function boot() {
     viewEl.innerHTML = loadingState();
+    startProgress();
     try {
-      state.meta = await apiCached("/meta");
+      state.meta = await api("/meta", { bust: true });
+      if (logoutEl) logoutEl.hidden = !state.meta.auth || !getToken();
+      if (state.meta.auth && !getToken()) {
+        viewEl.innerHTML = "";
+        showAuthGate();
+        return;
+      }
+      hideAuthGate();
       await refreshBasics();
       if (!location.hash) history.replaceState(null, "", "#/overview");
       await renderApp();
+      // Prefetch tab OTB pertama saat idle supaya klik pertama terasa instan.
+      const prefetchOtb = () => {
+        const gid = state.sheetStatus?.tabs?.[0]?.gid;
+        if (gid) api(`/sheet/entries?gid=${encodeURIComponent(gid)}`, { silent: true }).catch(() => {});
+      };
+      if ("requestIdleCallback" in window) requestIdleCallback(prefetchOtb, { timeout: 2000 });
+      else setTimeout(prefetchOtb, 1200);
     } catch (err) {
+      if (err.auth) return;
       viewEl.innerHTML = emptyState("Gagal terhubung ke server", err.message, "i-alert");
+    } finally {
+      stopProgress();
     }
   }
 
   boot();
 })();
+
