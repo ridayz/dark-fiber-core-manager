@@ -580,7 +580,10 @@
         <span class="sk sk-line"></span>
         <span class="sk sk-line w70"></span>
       </div>
-      <p class="sk-note"><span class="spinner" aria-hidden="true"></span> Memuat dataâ€¦</p>
+      <div class="sk-loading" role="status" aria-live="polite">
+        <div class="sk-loading-top"><span>Memuat data</span><span class="sk-loading-sub">Mohon tunggu?</span></div>
+        <div class="meter sk-meter" aria-hidden="true"><span></span></div>
+      </div>
     </div>`;
   }
 
@@ -2337,7 +2340,7 @@
             <p>Sync terakhir <span class="mono">${fmtWhen(status.last_sync)}</span></p>
             <p class="muted">Otomatis tiap ${num(status.poll_seconds)} detik</p>
             ${failed.length ? `<p class="state state-warn"><span class="dot"></span>${failed.length} tab gagal diakses</p>` : ""}
-            <a class="link" href="${esc(status.spreadsheet_url)}" target="_blank" rel="noopener">Buka Google Sheet â†—</a>
+            <a class="btn btn-ghost btn-sm otb-sheet-link" href="${esc(status.spreadsheet_url)}" target="_blank" rel="noopener" title="Buka spreadsheet sumber data di Google Sheets"><svg class="ico"><use href="#i-link"/></svg><span>Buka Google Sheet sumber</span></a>
           </div>
         </aside>`;
 
