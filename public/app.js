@@ -2369,7 +2369,7 @@
         <section class="otb-main">
           <div class="card otb-head">
             <div class="otb-head-main">
-              <a class="otb-back" href="#/otb/${encodeURIComponent(activeGid)}">← Semua OTB · ${esc(tab ? tab.name : "")}</a>
+              <a class="btn btn-ghost btn-sm otb-back" href="#/otb/${encodeURIComponent(activeGid)}"><svg class="ico"><use href="#i-back"/></svg><span>Semua OTB ? ${esc(tab ? tab.name : "")}</span></a>
               <h2 class="otb-title">${esc(detail.panel || "Tanpa panel")}</h2>
               <p class="otb-sub" id="otb-count">${num(rows.length)}${q ? ` dari ${num(detail.rows.length)}` : ""} entri port · ${num(usage.used)}${usage.size ? `/${num(usage.size)}` : ""} core${detail.section ? ` · ${esc(detail.section)}` : ""}</p>
             </div>

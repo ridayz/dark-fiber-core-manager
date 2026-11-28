@@ -1068,8 +1068,10 @@ body.auth-locked .app { filter: saturate(0.6); }
 .otb-card-name { font-size: 12.5px; font-weight: 500; line-height: 1.4; min-height: 36px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .otb-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--mut); margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(0,0,0,0.04); }
 .otb-card .meter { margin-top: 1px; }
-.otb-back { display: inline-block; font-size: 10.5px; color: var(--mut); margin-bottom: 5px; }
-.otb-back:hover { color: var(--accent); }
+.otb-back { margin-bottom: 8px; color: var(--tx2); background: var(--panel-2); border-color: var(--line); }
+.otb-back:hover { color: var(--accent); border-color: rgba(0,58,112,0.2); background: var(--accent-soft); }
+.otb-back .ico { color: var(--mut); }
+.otb-back:hover .ico { color: var(--accent); }
 .otb-head-main { min-width: 0; }
 .otb-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .otb-error { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-color: rgba(251, 191, 36, 0.3); color: var(--warn); font-size: 12px; }
