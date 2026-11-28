@@ -1,4 +1,4 @@
-﻿/* Dark Fiber Core Manager â€” light dashboard, matched to tampilan.jpg + warna.jpg. */
+﻿/* Dark Fiber Core Manager — light dashboard, matched to tampilan.jpg + warna.jpg. */
 :root {
   color-scheme: light;
   --bg: #f3f4f6;
@@ -1091,7 +1091,7 @@ body.auth-locked .app { filter: saturate(0.6); }
   .otb-search { width: 100%; }
 }
 
-/* Sheet mirror â€” OTB asli di Ringkasan & Kabel Backbone -------------------- */
+/* Sheet mirror — OTB asli di Ringkasan & Kabel Backbone -------------------- */
 .bar-sheet { margin-top: 6px; }
 .sheet-badge { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 20px; background: rgba(63, 182, 139, 0.12); color: #7dd8b3; border: 1px solid rgba(63, 182, 139, 0.25); }
 .sheet-line { display: flex; gap: 7px; align-items: flex-start; margin-top: 8px; padding: 8px 9px; border-radius: 8px; background: rgba(63, 182, 139, 0.08); font-size: 11px; color: var(--tx2); line-height: 1.45; }
