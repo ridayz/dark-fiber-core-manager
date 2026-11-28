@@ -766,23 +766,33 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .route-progress {
   position: fixed;
   inset: 0 0 auto 0;
-  height: 2px;
+  height: 3px;
   z-index: 200;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.18s var(--ease);
+  transition: opacity 0.12s var(--ease);
 }
 .route-progress.on { opacity: 1; }
 .route-progress > span {
   display: block;
   height: 100%;
   width: 0;
-  background: linear-gradient(90deg, var(--accent), #2f7fd1 60%, var(--accent));
-  box-shadow: 0 0 8px rgba(0, 58, 112, 0.45);
-  transition: width 0.5s var(--ease);
+  background: linear-gradient(90deg, #0b63c4 0%, #3ea0ff 45%, #0b63c4 100%);
+  background-size: 200% 100%;
+  box-shadow: 0 0 10px rgba(62, 160, 255, 0.55);
+  transition: width 8s cubic-bezier(0.1, 0.4, 0.2, 1);
+  animation: bar-flow 1.2s linear infinite;
 }
-.route-progress.on > span { width: 72%; }
-.route-progress.on.done > span { width: 100%; transition: width 0.16s linear; }
+.route-progress.on > span { width: 88%; }
+.route-progress.on.done > span {
+  width: 100%;
+  transition: width 0.18s ease-out;
+  animation: none;
+}
+@keyframes bar-flow {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 .skeleton { display: grid; gap: 16px; padding: 4px 0 24px; }
 .sk-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }

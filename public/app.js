@@ -832,10 +832,8 @@
       const needsFetch =
         changed &&
         ((route.name === "cables" && route.id) || (route.name === "tenants" && route.id) || route.name === "otb");
-      if (needsFetch) {
-        startProgress();
-        viewEl.innerHTML = loadingState();
-      }
+      if (changed) startProgress();
+      if (needsFetch) viewEl.innerHTML = loadingState();
 
       if (route.name === "cables" && route.id) {
         state.cable = await api(`/cables/${route.id}`);
