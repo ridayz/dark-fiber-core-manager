@@ -733,7 +733,7 @@
 
   function updateChrome(route) {
     const titles = {
-      overview: ["Ringkasan jaringan", "Site, OTB, dan utilisasi core backbone"],
+      overview: ["Dashboard", "Site, OTB, dan utilisasi core backbone"],
       cables: ["Kabel backbone", "Perangkat OTB dari Google Sheets dan kabel manual"],
       otb: ["Peta OTB & rak", "Sinkron otomatis dari Google Sheets"],
       tenants: ["Tenant", "Pemilik lease dark fiber"],
@@ -967,7 +967,6 @@
           <span><b>${num(t.used_combined ?? t.leased)}</b> core terpakai</span>
           <span><b>${num(t.available_combined ?? t.available)}</b> tersedia</span>
           <span><b>${pct(t.utilization_combined ?? t.utilization)}</b> utilisasi</span>
-          <span><b>${num(t.sheet_used)}</b>/${num(t.sheet_total)} port sheet</span>
         </div>
       </div>
 
@@ -1004,80 +1003,7 @@
           <span class="panel-meta">${num(t.used_combined ?? t.leased)} core · ${pct(t.utilization_combined ?? t.utilization)}</span>
         </div>
         <div class="panel-body">${areaChart(groups)}</div>
-      </section>
-
-      <div class="overview-grid">
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h3 class="panel-title">Distribusi core per kabel</h3>
-              <p class="panel-meta">Warna segmen menandai tenant pemakai core</p>
-            </div>
-            <a class="panel-link" href="#/cables">Semua kabel <svg class="ico"><use href="#i-chevron"/></svg></a>
-          </div>
-          <div class="panel-body">
-            <div class="cable-bars">
-              ${cables.length ? cables.map(cableBarsRow).join("") : emptyState("Tidak ada kabel yang cocok", "Ubah kata kunci pencarian")}
-            </div>
-            <div class="legend">
-              <span class="legend-item"><span class="dot dot-neutral"></span>Tersedia</span>
-              ${s.top_tenants.map((x) => `<span class="legend-item"><span class="dot" style="color:${x.color}"></span>${esc(x.name)} <span class="count">${num(x.cores)}</span></span>`).join("")}
-            </div>
-            <div class="size-grid">
-              ${s.by_size.map((row) => `
-                <div class="size-item">
-                  <div class="size-top"><span class="size-label">${row.size} core</span><span class="size-pct">${pct(row.capacity ? ((row.used_combined ?? row.leased) / row.capacity) * 100 : 0)}</span></div>
-                  <div class="meter"><span style="width:${row.capacity ? Math.min(100, ((row.used_combined ?? row.leased) / row.capacity) * 100) : 0}%"></span></div>
-                  <div class="size-fig">${num(row.used_combined ?? row.leased)} / ${num(row.capacity)} core terpakai</div>
-                  ${row.sheet_total ? `<div class="size-sheet">${num(row.sheet_used)}/${num(row.sheet_total)} port sheet · ${num(row.sheet_used_cores)} core sheet · ${num(row.leased)} lease</div>` : ""}
-                </div>`).join("")}
-            </div>
-          </div>
-        </section>
-
-        <div class="overview-side">
-          <section class="panel">
-            <div class="panel-head">
-              <h3 class="panel-title">Tenant teratas</h3>
-              <span class="panel-meta">Berdasarkan core aktif</span>
-            </div>
-            <div class="panel-body">
-              ${s.top_tenants.length ? `<div class="rank-list">
-                ${s.top_tenants.map((x) => `
-                  <div class="rank-row">
-                    <span class="dot" style="color:${x.color}"></span>
-                    <a class="rank-name" href="#/tenants/${x.id}">${esc(x.name)}</a>
-                    <span class="rank-val">${num(x.cores)}</span>
-                    <span class="rank-bar"><span style="width:${(x.cores / maxTenant) * 100}%;background:${x.color}"></span></span>
-                  </div>`).join("")}
-              </div>` : emptyState("Belum ada alokasi", "Core akan muncul setelah lease pertama", "i-users")}
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <div>
-                <h3 class="panel-title">Port sheet kepake</h3>
-                <p class="panel-meta">Data asli Peta OTB · Tujuan terisi · sync Google Sheet</p>
-              </div>
-              <a class="panel-link" href="#/otb">Peta OTB <svg class="ico"><use href="#i-chevron"/></svg></a>
-            </div>
-            <div class="panel-body">
-              ${s.sheet_by_cable && s.sheet_by_cable.length ? `<div class="sheet-list">
-                ${s.sheet_by_cable.slice(0, 10).map((row) => `
-                  <a class="sheet-row" href="#/cables/${row.cable_id}">
-                    <span class="sheet-main">
-                      <span class="sheet-name">${esc(row.panel_code || row.name)}</span>
-                      <span class="sheet-sub">${esc(row.tab_name || "")} · ${num(row.sheet_used)}/${num(row.sheet_total)} port · ${num(row.sheet_used_cores)} core</span>
-                    </span>
-                    <span class="sheet-pct">${pct(row.sheet_total ? (row.sheet_used / row.sheet_total) * 100 : 0)}</span>
-                    <span class="sheet-bar"><span style="width:${row.sheet_total ? Math.min(100, (row.sheet_used / row.sheet_total) * 100) : 0}%"></span></span>
-                  </a>`).join("")}
-              </div>` : emptyState("Belum ada data sheet", "Jalankan sync sheet dari menu Kabel backbone atau Peta OTB", "i-layers")}
-            </div>
-          </section>
-        </div>
-      </div>`;
+      </section>`;
   }
 
   function cableBarsRow(cable) {
