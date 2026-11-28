@@ -73,14 +73,14 @@ def _login_failed(ip: str) -> None:
 # ---------------------------------------------------------------- cache
 _CACHE: dict[str, tuple[float, object]] = {}
 _CACHE_TTL = {
-    "/api/summary": 15,
-    "/api/cables": 15,
-    "/api/tenants": 15,
-    "/api/leases": 15,
-    "/api/plants": 15,
-    "/api/sheet/status": 10,
-    "/api/sheet/entries": 20,
-    "/api/sheet/search": 10,
+    "/api/summary": 30,
+    "/api/cables": 30,
+    "/api/tenants": 30,
+    "/api/leases": 30,
+    "/api/plants": 30,
+    "/api/sheet/status": 15,
+    "/api/sheet/entries": 30,
+    "/api/sheet/search": 15,
 }
 
 

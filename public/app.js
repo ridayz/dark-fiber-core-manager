@@ -196,7 +196,7 @@
   const TOKEN_KEY = "dfcm.token";
   const apiCache = new Map();
   const apiInflight = new Map();
-  const API_TTL = 15000;
+  const API_TTL = 60000;
 
   function getToken() {
     try {
@@ -685,19 +685,24 @@
   // ---------------------------------------------------------------- data
   async function refreshBasics({ bust = false } = {}) {
     const opts = bust ? { bust: true } : {};
-    const [summary, tenants, leases, sheetStatus] = await Promise.all([
+    const [summary, tenants, leases] = await Promise.all([
       api("/summary", opts),
       api("/tenants", opts),
       api("/leases", opts),
-      api("/sheet/status", opts),
     ]);
     state.summary = summary;
     state.cables = summary.cables;
     state.plants = summary.plants || [];
     state.tenants = tenants.tenants;
     state.leases = leases.leases;
-    state.sheetStatus = sheetStatus;
     updateSidebar();
+    // Sheet status is secondary (sidebar count / OTB tab); don't block first paint.
+    api("/sheet/status", opts)
+      .then((sheetStatus) => {
+        state.sheetStatus = sheetStatus;
+        updateSidebar();
+      })
+      .catch(() => {});
   }
 
   function updateSidebar() {
