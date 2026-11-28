@@ -9,7 +9,7 @@
     { "source": "/api/(.*)", "destination": "/api/index?__path=$1" }
   ],
   "crons": [
-    { "path": "/api/cron/sheet-sync", "schedule": "0 0 * * *" }
+    { "path": "/api/cron/sheet-sync", "schedule": "0 * * * *" }
   ],
   "headers": [
     {
